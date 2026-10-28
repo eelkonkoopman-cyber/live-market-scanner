@@ -1,0 +1,426 @@
+/* ============================================================================
+   AfterBell theme tokens — copied from AfterBell's src/app.css
+   (D:\Blackthorn Live\src\app.css), `@layer base` theme blocks only.
+
+   Every custom property below is copied verbatim from AfterBell (same
+   values, same comments) with an `--ab-` prefix added to every token name,
+   so these can never collide with the scanner's own semantic tokens
+   (--bg, --fg, --accent, etc., defined in styles.css, which derive FROM
+   these).
+
+   To resync after AfterBell's palette changes: paste the six theme blocks
+   from AfterBell's app.css again, then reapply the prefix with:
+
+       sed -E 's/--([a-z])/--ab-\1/g'
+
+   (then re-add the scanner-only additions below, which that sed will not
+   produce, since AfterBell has no such tokens).
+
+   Every block carries five scanner-only additions, absent from AfterBell,
+   each tagged "Scanner addition" at its point of use:
+
+     --ab-shadow-rgb / --ab-shadow-k
+       An RGB triplet + multiplier for black drop shadows that self-adjust
+       per theme: rgb(var(--ab-shadow-rgb) / calc(0.75 * var(--ab-shadow-k))).
+       The five dark themes run pure black at full strength (0 0 0 / 1);
+       paper softens to a warm-grey at 15% strength (60 50 30 / 0.15) so
+       shadows don't read as heavy black smudges on a light background.
+
+     --ab-on-accent / --ab-accent-text / --ab-warn-text
+       WCAG-legible stand-ins for TEXT drawn on a solid accent fill
+       (--ab-on-accent) and for accent-/warn-coloured TEXT on the normal
+       background (--ab-accent-text / --ab-warn-text) — as opposed to
+       fills, borders, tints and glows, which keep using --ab-bg-base /
+       --ab-accent-hover / --ab-warn directly. On the five dark themes
+       these just equal --ab-bg-base / --ab-accent-hover / --ab-warn
+       (already high-contrast: 6.1-8.8:1 for on-accent, 8.1-11.5:1 for
+       accent-hover text). On paper, though, the plain accent/warn colour
+       (184 134 11) is only 2.89:1 against cream bg-base and 2.35:1 for
+       accent-hover (205 149 39) text on the page background — both fail
+       WCAG AA (4.5:1). So paper substitutes its near-black ink
+       (--ab-text-primary, 5.44:1) for on-accent, and a 70/30 accent/ink
+       blend (137 101 14, 4.74:1) for accent-text and warn-text (warn ==
+       accent on paper). Written as literal triplets, not var() references,
+       so each theme block stays self-contained.
+
+   `color-scheme` is likewise a scanner addition — AfterBell sets it once,
+   globally, via its own `html { color-scheme: dark; }` outside these
+   blocks — set per-block here so native form controls / scrollbars render
+   correctly on every theme, paper included.
+   ========================================================================== */
+
+:root,
+[data-theme='warm'] {
+	color-scheme: dark;
+
+	--ab-bg-base: 10 10 10; /* #0a0a0a */
+	--ab-bg-surface: 19 18 17; /* #131211 */
+	--ab-bg-elevated: 26 24 21; /* #1a1815 */
+	--ab-bg-hover: 34 30 26; /* #221e1a */
+	--ab-border: 42 37 32; /* #2a2520 */
+	--ab-border-strong: 58 52 44; /* #3a342c */
+	--ab-text-primary: 236 229 212; /* #ece5d4 — warm cream */
+	--ab-text-secondary: 184 176 160; /* #b8b0a0 */
+	--ab-text-muted: 122 115 103; /* #7a7367 */
+	--ab-accent: 212 166 83; /* #d4a653 — warm gold */
+	--ab-accent-hover: 232 192 103; /* #e8c067 */
+	--ab-accent-muted: 140 110 52; /* #8c6e34 */
+	--ab-gain: 123 168 123; /* #7ba87b — sage */
+	--ab-loss: 201 122 110; /* #c97a6e — terracotta */
+	--ab-warn: 212 166 83; /* same as accent */
+
+	/* Scanner additions — not from AfterBell; see header comment. */
+	--ab-shadow-rgb: 0 0 0;
+	--ab-shadow-k: 1;
+	--ab-on-accent: 10 10 10;
+	--ab-accent-text: 232 192 103;
+	--ab-warn-text: 212 166 83;
+
+	/* Liquid Glass shadow — top-edge cream specular, bottom inner
+	   shadow for thickness, soft warm-dark drop shadow. */
+	--ab-glass-shadow:
+		0 1px 0 rgba(236, 229, 212, 0.10) inset,
+		0 0 0 1px rgba(236, 229, 212, 0.05),
+		0 12px 32px rgba(0, 0, 0, 0.45),
+		0 -1px 0 rgba(0, 0, 0, 0.20) inset;
+	--ab-glass-shadow-strong:
+		0 1px 0 rgba(236, 229, 212, 0.14) inset,
+		0 0 0 1px rgba(236, 229, 212, 0.08),
+		0 16px 44px rgba(0, 0, 0, 0.55),
+		0 -1px 0 rgba(0, 0, 0, 0.25) inset;
+
+	/* Ambient body gradient tint — warm gold + warm-brown washes. */
+	--ab-ambient-1: 212 166 83;
+	--ab-ambient-2: 58 52 44;
+	--ab-ambient-3: 91 76 59;
+
+	/* Scrollbar thumb. Pulled out as a var so themes can retint
+	   to match their border tones. */
+	--ab-scrollbar-thumb: 58 52 44;
+	--ab-scrollbar-thumb-hover: 90 79 66;
+
+	/* Selection — warm gold tint for warm theme. Slate uses
+	   the cooler blue accent. */
+	--ab-selection-bg: 212 166 83;
+	--ab-selection-text: 236 229 212;
+
+	/* Watermark blend mode. Dark themes use `plus-lighter` so
+	   the cream seal additively brightens whatever is below.
+	   Light themes flip to `multiply` so a dark seal subtracts
+	   visibly from the cream bg instead of saturating to white. */
+	--ab-watermark-blend: plus-lighter;
+}
+
+[data-theme='slate'] {
+	color-scheme: dark;
+
+	/* The v0.1.x slate palette, recovered from git. Cool steel
+	   blues with the same warm gold accent so brand identity
+	   stays consistent. */
+	--ab-bg-base: 28 36 48; /* #1c2430 */
+	--ab-bg-surface: 47 59 74; /* #2f3b4a */
+	--ab-bg-elevated: 58 71 87; /* #3a4757 */
+	--ab-bg-hover: 74 86 101; /* #4a5665 */
+	--ab-border: 74 86 101; /* #4a5665 */
+	--ab-border-strong: 110 120 134; /* #6e7886 */
+	--ab-text-primary: 242 244 246; /* #f2f4f6 */
+	--ab-text-secondary: 167 176 186; /* #a7b0ba */
+	--ab-text-muted: 110 120 134; /* #6e7886 */
+	--ab-accent: 212 175 55; /* #d4af37 — classic gold */
+	--ab-accent-hover: 232 198 104; /* #e8c668 */
+	--ab-accent-muted: 92 74 28; /* #5c4a1c */
+	--ab-gain: 62 184 125; /* #3eb87d */
+	--ab-loss: 226 102 102; /* #e26666 */
+	--ab-warn: 232 180 74; /* #e8b44a */
+
+	/* Scanner additions — not from AfterBell; see header comment. */
+	--ab-shadow-rgb: 0 0 0;
+	--ab-shadow-k: 1;
+	--ab-on-accent: 28 36 48;
+	--ab-accent-text: 232 198 104;
+	--ab-warn-text: 232 180 74;
+
+	/* Pure-white specular for the cool palette — the warm cream
+	   would tint blue surfaces yellow. Drop shadows stay
+	   neutral-dark. */
+	--ab-glass-shadow:
+		0 1px 0 rgba(255, 255, 255, 0.08) inset,
+		0 0 0 1px rgba(255, 255, 255, 0.04),
+		0 12px 32px rgba(0, 0, 0, 0.45),
+		0 -1px 0 rgba(0, 0, 0, 0.20) inset;
+	--ab-glass-shadow-strong:
+		0 1px 0 rgba(255, 255, 255, 0.12) inset,
+		0 0 0 1px rgba(255, 255, 255, 0.07),
+		0 16px 44px rgba(0, 0, 0, 0.55),
+		0 -1px 0 rgba(0, 0, 0, 0.25) inset;
+
+	/* Cool ambient washes — gold pinprick top-left for brand
+	   continuity, blue-grey bulk elsewhere. */
+	--ab-ambient-1: 212 175 55;
+	--ab-ambient-2: 47 59 74;
+	--ab-ambient-3: 74 86 101;
+
+	--ab-scrollbar-thumb: 74 86 101;
+	--ab-scrollbar-thumb-hover: 110 120 134;
+
+	--ab-selection-bg: 212 175 55;
+	--ab-selection-text: 242 244 246;
+
+	--ab-watermark-blend: plus-lighter;
+}
+
+[data-theme='midnight'] {
+	color-scheme: dark;
+
+	/* Deep saturated navy with ice-blue accent — Bloomberg-terminal
+	   vibe. Goes blacker and bluer than slate; the accent shifts
+	   from warm gold to cool ice so the palette reads as one
+	   cohesive cool-blue family rather than a mixed-temperature
+	   slate. */
+	--ab-bg-base: 11 22 40; /* #0b1628 — deep ink-blue */
+	--ab-bg-surface: 20 35 64; /* #142340 */
+	--ab-bg-elevated: 29 48 82; /* #1d3052 */
+	--ab-bg-hover: 38 61 99; /* #263d63 */
+	--ab-border: 40 62 94; /* #283e5e */
+	--ab-border-strong: 58 82 125; /* #3a527d */
+	--ab-text-primary: 230 240 255; /* #e6f0ff — ice-tinted white */
+	--ab-text-secondary: 164 184 212; /* #a4b8d4 */
+	--ab-text-muted: 107 126 157; /* #6b7e9d */
+	--ab-accent: 92 184 232; /* #5cb8e8 — ice blue */
+	--ab-accent-hover: 125 204 244; /* #7dccf4 */
+	--ab-accent-muted: 45 93 128; /* #2d5d80 */
+	--ab-gain: 92 208 168; /* #5cd0a8 — cyan-leaning green */
+	--ab-loss: 240 128 128; /* #f08080 — coral-leaning red */
+	--ab-warn: 240 192 96; /* #f0c060 */
+
+	/* Scanner additions — not from AfterBell; see header comment. */
+	--ab-shadow-rgb: 0 0 0;
+	--ab-shadow-k: 1;
+	--ab-on-accent: 11 22 40;
+	--ab-accent-text: 125 204 244;
+	--ab-warn-text: 240 192 96;
+
+	/* Strong cool-white specular — the navy is deep enough that a
+	   subtle highlight gets lost; bumped versus slate. */
+	--ab-glass-shadow:
+		0 1px 0 rgba(230, 240, 255, 0.10) inset,
+		0 0 0 1px rgba(230, 240, 255, 0.05),
+		0 12px 32px rgba(0, 0, 0, 0.5),
+		0 -1px 0 rgba(0, 0, 0, 0.25) inset;
+	--ab-glass-shadow-strong:
+		0 1px 0 rgba(230, 240, 255, 0.14) inset,
+		0 0 0 1px rgba(230, 240, 255, 0.08),
+		0 16px 44px rgba(0, 0, 0, 0.6),
+		0 -1px 0 rgba(0, 0, 0, 0.3) inset;
+
+	/* Ice-cyan glow top-left, deep navy elsewhere — feels like
+	   moonlight on a cold ocean. */
+	--ab-ambient-1: 92 184 232;
+	--ab-ambient-2: 29 48 82;
+	--ab-ambient-3: 58 82 125;
+
+	--ab-scrollbar-thumb: 58 82 125;
+	--ab-scrollbar-thumb-hover: 107 126 157;
+
+	--ab-selection-bg: 92 184 232;
+	--ab-selection-text: 230 240 255;
+
+	--ab-watermark-blend: plus-lighter;
+}
+
+[data-theme='forest'] {
+	color-scheme: dark;
+
+	/* Deep green-black with sage accent — calming, easy on the
+	   eyes for long sessions. Builds on the existing brand sage
+	   `gain` color (kept in warm/slate as `#7ba87b`); here sage IS
+	   the accent and the whole surface reads as one cohesive green
+	   family rather than green-on-grey. */
+	--ab-bg-base: 10 20 16; /* #0a1410 — deep forest-black */
+	--ab-bg-surface: 15 31 23; /* #0f1f17 */
+	--ab-bg-elevated: 21 42 31; /* #152a1f */
+	--ab-bg-hover: 29 58 42; /* #1d3a2a */
+	--ab-border: 31 53 40; /* #1f3528 */
+	--ab-border-strong: 46 74 58; /* #2e4a3a */
+	--ab-text-primary: 232 239 222; /* #e8efde — warm cream-green */
+	--ab-text-secondary: 168 184 160; /* #a8b8a0 */
+	--ab-text-muted: 110 122 104; /* #6e7a68 */
+	--ab-accent: 135 169 107; /* #87a96b — sage */
+	--ab-accent-hover: 163 195 136; /* #a3c388 */
+	--ab-accent-muted: 90 112 72; /* #5a7048 */
+	--ab-gain: 109 184 109; /* #6db86d — clearer green than accent */
+	--ab-loss: 196 106 92; /* #c46a5c — terracotta-leaning */
+	--ab-warn: 212 166 83; /* warm gold for warnings */
+
+	/* Scanner additions — not from AfterBell; see header comment. */
+	--ab-shadow-rgb: 0 0 0;
+	--ab-shadow-k: 1;
+	--ab-on-accent: 10 20 16;
+	--ab-accent-text: 163 195 136;
+	--ab-warn-text: 212 166 83;
+
+	/* Cream-green specular tint matches the warm cream-green
+	   text color, which keeps the rim highlight feeling native
+	   to the green family. */
+	--ab-glass-shadow:
+		0 1px 0 rgba(232, 239, 222, 0.10) inset,
+		0 0 0 1px rgba(232, 239, 222, 0.05),
+		0 12px 32px rgba(0, 0, 0, 0.5),
+		0 -1px 0 rgba(0, 0, 0, 0.22) inset;
+	--ab-glass-shadow-strong:
+		0 1px 0 rgba(232, 239, 222, 0.14) inset,
+		0 0 0 1px rgba(232, 239, 222, 0.08),
+		0 16px 44px rgba(0, 0, 0, 0.6),
+		0 -1px 0 rgba(0, 0, 0, 0.27) inset;
+
+	/* Sage glow top-left, deep forest elsewhere. */
+	--ab-ambient-1: 135 169 107;
+	--ab-ambient-2: 30 50 38;
+	--ab-ambient-3: 50 80 65;
+
+	--ab-scrollbar-thumb: 46 74 58;
+	--ab-scrollbar-thumb-hover: 90 112 72;
+
+	--ab-selection-bg: 135 169 107;
+	--ab-selection-text: 232 239 222;
+
+	--ab-watermark-blend: plus-lighter;
+}
+
+[data-theme='plum'] {
+	color-scheme: dark;
+
+	/* Deep aubergine-black with rose-magenta accent. Fills the
+	   purple/magenta family the other dark themes do not touch.
+	   Surfaces stay aubergine rather than charcoal so the whole
+	   palette reads as one purple family rather than "purple
+	   accent on grey." */
+	--ab-bg-base: 20 16 30; /* #14101e — deep aubergine-black */
+	--ab-bg-surface: 31 24 48; /* #1f1830 */
+	--ab-bg-elevated: 42 34 64; /* #2a2240 */
+	--ab-bg-hover: 56 46 84; /* #382e54 */
+	--ab-border: 45 37 69; /* #2d2545 */
+	--ab-border-strong: 70 58 104; /* #463a68 */
+	--ab-text-primary: 240 232 244; /* #f0e8f4 — cream-purple tint */
+	--ab-text-secondary: 184 168 200; /* #b8a8c8 */
+	--ab-text-muted: 128 112 138; /* #80708a */
+	--ab-accent: 201 122 166; /* #c97aa6 — rose-magenta */
+	--ab-accent-hover: 224 148 189; /* #e094bd */
+	--ab-accent-muted: 122 72 104; /* #7a4868 */
+	--ab-gain: 130 192 130; /* sage — same family as warm */
+	--ab-loss: 217 122 122; /* coral */
+	--ab-warn: 212 166 83; /* gold — for warnings, contrasts plum */
+
+	/* Scanner additions — not from AfterBell; see header comment. */
+	--ab-shadow-rgb: 0 0 0;
+	--ab-shadow-k: 1;
+	--ab-on-accent: 20 16 30;
+	--ab-accent-text: 224 148 189;
+	--ab-warn-text: 212 166 83;
+
+	/* Cream-purple specular matches the cream-purple text and
+	   keeps the rim highlight feeling native to the family. */
+	--ab-glass-shadow:
+		0 1px 0 rgba(240, 232, 244, 0.10) inset,
+		0 0 0 1px rgba(240, 232, 244, 0.05),
+		0 12px 32px rgba(0, 0, 0, 0.5),
+		0 -1px 0 rgba(0, 0, 0, 0.22) inset;
+	--ab-glass-shadow-strong:
+		0 1px 0 rgba(240, 232, 244, 0.14) inset,
+		0 0 0 1px rgba(240, 232, 244, 0.08),
+		0 16px 44px rgba(0, 0, 0, 0.6),
+		0 -1px 0 rgba(0, 0, 0, 0.27) inset;
+
+	/* Magenta glow + purple bulk — the gold pinprick on warm
+	   becomes a rose pinprick here. */
+	--ab-ambient-1: 201 122 166;
+	--ab-ambient-2: 42 34 64;
+	--ab-ambient-3: 70 58 104;
+
+	--ab-scrollbar-thumb: 70 58 104;
+	--ab-scrollbar-thumb-hover: 128 112 138;
+
+	--ab-selection-bg: 201 122 166;
+	--ab-selection-text: 240 232 244;
+
+	--ab-watermark-blend: plus-lighter;
+}
+
+[data-theme='paper'] {
+	color-scheme: light;
+
+	/* Warm-paper light theme. Not stark white — that is harsh under
+	   long sessions; instead a warm cream like aged book paper
+	   (#f6f1e7) with deep warm ink (#1a1815). The accent stays gold
+	   but darker (#b8860b) so it has actual contrast on cream;
+	   gain/loss go DEEPER (more saturated) too — pastel green/red
+	   would disappear on light bg.
+	 *
+	   The Liquid Glass shadow stack flips polarity: top-edge
+	   highlight stays light (white catches light), but the drop
+	   shadow becomes a soft warm grey at LOW alpha (0.08 vs 0.45
+	   on dark themes — anything heavier reads heavy and ugly on
+	   cream). Inner ring becomes a thin DARK line for definition
+	   instead of a cream highlight that would blend into the bg.
+	 *
+	   Watermark blend flips to `multiply` — the dark seal needs
+	   to subtract from the cream bg, not add (which on light bg
+	   would saturate to white = invisible). */
+	--ab-bg-base: 246 241 231; /* #f6f1e7 — warm paper */
+	--ab-bg-surface: 251 248 240; /* #fbf8f0 — warmer paper for cards */
+	--ab-bg-elevated: 255 253 247; /* #fffdf7 — near-white for elevated */
+	--ab-bg-hover: 237 229 208; /* #ede5d0 — warm beige hover */
+	--ab-border: 212 200 168; /* #d4c8a8 — light tan */
+	--ab-border-strong: 168 154 122; /* #a89a7a */
+	--ab-text-primary: 26 24 21; /* #1a1815 — warm near-black ink */
+	--ab-text-secondary: 82 74 62; /* #524a3e */
+	--ab-text-muted: 138 129 112; /* #8a8170 */
+	--ab-accent: 184 134 11; /* #b8860b — darker gold, readable on cream */
+	--ab-accent-hover: 205 149 39; /* #cd9527 */
+	--ab-accent-muted: 232 212 160; /* #e8d4a0 — soft gold for backgrounds */
+	--ab-gain: 45 122 45; /* #2d7a2d — deeper green */
+	--ab-loss: 176 69 69; /* #b04545 — deeper red */
+	--ab-warn: 184 134 11; /* same as accent */
+
+	/* Scanner additions — not from AfterBell; see header comment.
+	   on-accent/accent-text/warn-text diverge from the dark-theme pattern
+	   here: the plain accent/warn colour fails WCAG AA as text on this
+	   light bg (2.89:1 / 2.35:1), so these substitute near-black ink and a
+	   70/30 accent/ink blend instead of echoing bg-base/accent-hover/warn. */
+	--ab-shadow-rgb: 60 50 30;
+	--ab-shadow-k: 0.15;
+	--ab-on-accent: 26 24 21;
+	--ab-accent-text: 137 101 14;
+	--ab-warn-text: 137 101 14;
+
+	/* Light glass shadows — soft white highlight on top, thin
+	   dark inner ring for edge definition, very soft warm-grey
+	   drop shadow. */
+	--ab-glass-shadow:
+		0 1px 0 rgba(255, 255, 255, 0.6) inset,
+		0 0 0 1px rgba(60, 50, 30, 0.06),
+		0 8px 24px rgba(60, 50, 30, 0.08),
+		0 -1px 0 rgba(60, 50, 30, 0.06) inset;
+	--ab-glass-shadow-strong:
+		0 1px 0 rgba(255, 255, 255, 0.8) inset,
+		0 0 0 1px rgba(60, 50, 30, 0.09),
+		0 12px 32px rgba(60, 50, 30, 0.10),
+		0 -1px 0 rgba(60, 50, 30, 0.08) inset;
+
+	/* Soft warm gold + amber washes. Lower-saturation than dark
+	   themes because cream-on-cream gradients are subtle by
+	   definition; pushing harder washes out the readability. */
+	--ab-ambient-1: 232 192 103;
+	--ab-ambient-2: 212 200 168;
+	--ab-ambient-3: 250 240 220;
+
+	--ab-scrollbar-thumb: 212 200 168;
+	--ab-scrollbar-thumb-hover: 168 154 122;
+
+	--ab-selection-bg: 184 134 11;
+	--ab-selection-text: 251 248 240;
+
+	/* `multiply` darkens the bg with the watermark color —
+	   correct polarity for light themes where the seal is dark. */
+	--ab-watermark-blend: multiply;
+}

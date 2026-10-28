@@ -1,0 +1,7 @@
+# End-to-end digest of TestPipelineDigest (bench_pipeline_test.go): what the scanner emits for a deterministic 1,200-ticker pipeline.
+# Regenerate (only for an INTENDED change of scan output): go test ./internal/engine -run TestPipelineDigest -pipe-update
+ticks 240
+tickrows 3071
+alerts 24
+entries 61
+sha256 85a48bead7456b866887aff4065bdf85935ba248b4542b23d072522c0afd33b2

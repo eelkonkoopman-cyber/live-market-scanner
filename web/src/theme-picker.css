@@ -1,0 +1,95 @@
+/* Theme picker: the round preview disc in the status bar (present in every
+   window — main and every pop-out) and its popover menu. Split out into its
+   own file because this feature's file ownership is scoped separately from
+   styles.css/afterbell-themes.css (see the theming task's file list) — the
+   semantic tokens it reaches for (--line, --line2, --r-sm, --r-md,
+   --glass-strong, --fg-soft, --acc-text) are defined there, and the two
+   `--ab-glass-shadow*` tokens come straight from afterbell-themes.css. */
+
+.thememenu-wrap {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+/* 22px preview disc. Its background (a gradient of the ACTIVE theme's own
+   swatches) is set inline in StatusBar.tsx, not here — it has to change
+   with the theme, and can't be a static class rule. */
+.themebtn {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--line2);
+  padding: 0;
+  cursor: pointer;
+  flex: none;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+.themebtn:hover { transform: scale(1.08); }
+.themebtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.thememenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 50; /* above the status bar's own stacking context */
+  width: 250px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--glass-strong);
+  border: 1px solid var(--line2);
+  border-radius: var(--r-md);
+  padding: 6px;
+  box-shadow: var(--ab-glass-shadow-strong);
+}
+
+.thememenu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: none;
+  border-radius: var(--r-sm);
+  padding: 6px 8px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+.thememenu-item:hover,
+.thememenu-item:focus-visible {
+  background: var(--fg-soft);
+  outline: none;
+}
+/* Active row's text picks up the accent tint — the swatch strip + ✓ already
+   say "this one's on", so this is a secondary, subtler cue. */
+.thememenu-item[aria-checked='true'] {
+  color: var(--acc-text);
+}
+
+.thememenu-swatches {
+  display: flex;
+  gap: 2px;
+  flex: none;
+}
+.thememenu-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+}
+
+.thememenu-name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thememenu-check {
+  flex: none;
+  width: 14px;
+  text-align: center;
+}

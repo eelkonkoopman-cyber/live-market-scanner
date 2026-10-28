@@ -1,0 +1,65 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "scanner",
+      "_comment": "Preview runs its OWN binary (built to TEMP) so it never collides with the user's running scanner.exe, which holds a file lock and a live WS connection. Rebuild it with: go build -o %TEMP%\\scanner_preview.exe ./cmd/scanner",
+      "runtimeExecutable": "C:\\Users\\koopm\\AppData\\Local\\Temp\\scanner_preview.exe",
+      "runtimeArgs": [],
+      "port": 7900,
+      "env": {
+        "MASSIVE_API_KEY": "dummy-verify-chart",
+        "SCANNER_NO_BROWSER": "1",
+        "SCANNER_LISTEN": "127.0.0.1:7900",
+        "SCANNER_DB": "C:\\Users\\koopm\\AppData\\Local\\Temp\\scanner_chart.db",
+        "SCANNER_NO_TRAY": "1",
+        "SCANNER_LOG_FILE": "C:/Users/koopm/AppData/Local/Temp/scanner_preview.log"
+      }
+    },
+    {
+      "name": "scanner-alt",
+      "_comment": "Second isolated preview (own exe copy, port, DB) for when another session holds 7900. Refresh with: cp %TEMP%/scanner_preview.exe %TEMP%/scanner_preview_alt.exe",
+      "runtimeExecutable": "C:/Users/koopm/AppData/Local/Temp/scanner_preview_alt.exe",
+      "runtimeArgs": [],
+      "port": 7901,
+      "env": {
+        "MASSIVE_API_KEY": "dummy-verify-chart",
+        "SCANNER_NO_BROWSER": "1",
+        "SCANNER_LISTEN": "127.0.0.1:7901",
+        "SCANNER_DB": "C:/Users/koopm/AppData/Local/Temp/scanner_chart_alt.db",
+        "SCANNER_NO_TRAY": "1",
+        "SCANNER_LOG_FILE": "C:/Users/koopm/AppData/Local/Temp/scanner_preview_alt.log"
+      }
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "cwd": "D:\\Live Market Scanner\\web",
+      "port": 5173,
+      "env": {
+        "SCANNER_WS_PORT": "7900"
+      }
+    },
+    {
+      "name": "web-live",
+      "_comment": "Vite dev server proxied to the USER'S LIVE scanner on 7878 (read-only use: chart.get/chart.watch for real bars). Never restart the live scanner from here.",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5174"
+      ],
+      "cwd": "D:\\Live Market Scanner\\web",
+      "port": 5174,
+      "env": {
+        "SCANNER_WS_PORT": "7878"
+      }
+    }
+  ]
+}

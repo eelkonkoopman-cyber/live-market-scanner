@@ -1,0 +1,1950 @@
+/* ============================================================================
+   Live Market Scanner — "Refined Fintech" design system
+   Palette: AfterBell's (warm gold default; five more themes — slate,
+   midnight, forest, plum, paper — switchable via `data-theme` on <html>).
+   Every colour token below derives from the `--ab-*` triplets defined in
+   ./afterbell-themes.css, so switching themes reflows the whole app with no
+   further CSS changes. Glass chrome, single accent, card rows unchanged.
+   Chrome (status bar, tabs, headers, panels, modals) uses backdrop-blur glass;
+   the virtualized data rows stay cheap (no per-row blur) and lean on subtle
+   tint + glow on hover/flash so a fast-scrolling grid stays smooth.
+   ========================================================================== */
+
+@import './afterbell-themes.css';
+
+:root {
+  /* surfaces */
+  --bg: rgb(var(--ab-bg-base));
+  --panel: rgb(var(--ab-bg-surface) / 0.62);
+  --panel-solid: rgb(var(--ab-bg-surface));
+  --glass: rgb(var(--ab-bg-surface) / 0.55);
+  --glass-strong: rgb(var(--ab-bg-elevated) / 0.84);
+  --row-hover: rgb(var(--ab-bg-hover) / 0.55);
+  --input-bg: rgb(var(--ab-bg-base) / 0.7);          /* new: dark input/select backgrounds */
+
+  /* hairlines */
+  --line: rgb(var(--ab-border) / 0.7);
+  --line2: rgb(var(--ab-border-strong) / 0.8);
+
+  /* text */
+  --fg: rgb(var(--ab-text-primary));
+  --muted: rgb(var(--ab-text-secondary));
+  --faint: rgb(var(--ab-text-muted));
+
+  /* accents — whichever theme's accent is currently active */
+  --accent: rgb(var(--ab-accent));
+  --accent-2: rgb(var(--ab-accent-hover));
+  --accent-soft: rgb(var(--ab-accent) / 0.15);
+  --acc-text: rgb(var(--ab-accent-text));            /* new: accent-tinted text (replaces the old lighter-indigo text tints) */
+  --on-accent: rgb(var(--ab-on-accent));             /* new: text on a solid accent fill (replaces plain white) */
+  --pos: rgb(var(--ab-gain));
+  --neg: rgb(var(--ab-loss));
+  --warn: rgb(var(--ab-warn-text));
+  --pos-soft: rgb(var(--ab-gain) / 0.14);  --pos-line: rgb(var(--ab-gain) / 0.35);   /* new tint pairs */
+  --neg-soft: rgb(var(--ab-loss) / 0.14);  --neg-line: rgb(var(--ab-loss) / 0.35);
+  --warn-soft: rgb(var(--ab-warn) / 0.16);
+  --fg-soft: rgb(var(--ab-text-primary) / 0.06);     /* new: replaces the assorted near-invisible white-tint fills (flat white around 4-10 percent opacity) */
+
+  /* gentle indigo gradient + glows */
+  --grad: linear-gradient(120deg, rgb(var(--ab-accent)) 0%, rgb(var(--ab-accent-hover)) 100%);
+  --grad-text: linear-gradient(120deg, rgb(var(--ab-accent-text)), rgb(var(--ab-text-primary)));
+  --glow: 0 0 0 1px rgb(var(--ab-accent) / 0.45), 0 6px 24px -6px rgb(var(--ab-accent) / 0.5);
+  --glow-cyan: 0 0 0 1px rgb(var(--ab-accent-hover) / 0.4), 0 6px 22px -8px rgb(var(--ab-accent-hover) / 0.45);
+
+  /* type */
+  --sans: "Plus Jakarta Sans Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+
+  --r: 20px;     /* panel / card radius */
+  --r-md: 14px;  /* inner card radius */
+  --r-sm: 12px;  /* control radius */
+
+  /* soft elevated-card surfaces (raised on the dark base) */
+  --card: rgb(var(--ab-bg-surface) / 0.66);
+  --card-flat: rgb(var(--ab-text-primary) / 0.03);
+  --shadow-card: var(--ab-glass-shadow);
+  --highlight: inset 0 1px 0 rgb(var(--ab-text-primary) / 0.08);
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font: 500 13px/1.45 var(--sans);
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* backdrop — AfterBell's ambient wash (per-theme --ab-ambient-1/2/3), gently
+   drifting behind everything */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -20% -10% -10% -10%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(1200px 700px at 8% -8%, rgb(var(--ab-ambient-1) / 0.07), transparent 65%),
+    radial-gradient(1000px 600px at 110% 110%, rgb(var(--ab-ambient-2) / 0.55), transparent 60%),
+    radial-gradient(900px 600px at 50% 60%, rgb(var(--ab-ambient-3) / 0.18), transparent 70%);
+  /* Static on purpose. This used to drift (a 30 s transform loop), which made
+     every backdrop-filter surface above it (status bar, cards, panels) re-blur
+     on EVERY display frame — on a 144 Hz ultrawide that was a whole GPU core
+     per window plus desktop-compositor load, for a 1.5% drift nobody watches. */
+}
+
+.app { display: flex; flex-direction: column; height: 100%; }
+
+::selection { background: rgb(var(--ab-selection-bg) / 0.30); color: rgb(var(--ab-selection-text)); }
+
+/* glass scrollbars */
+* { scrollbar-width: thin; scrollbar-color: rgb(var(--ab-scrollbar-thumb)) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb {
+  background: rgb(var(--ab-scrollbar-thumb));
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 10px;
+}
+*::-webkit-scrollbar-thumb:hover { background: rgb(var(--ab-scrollbar-thumb-hover)); background-clip: padding-box; }
+
+/* ============================== status bar ============================== */
+.statusbar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: nowrap;
+  padding: 6px 12px;
+  background: var(--glass);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  border-bottom: 1px solid var(--line2);
+  position: relative;
+  z-index: 5;
+}
+.statusbar::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px;
+  background: var(--grad); opacity: 0.55;
+}
+
+.brand {
+  display: inline-flex; align-items: center; gap: 9px;
+  font-weight: 700; font-size: 14px; letter-spacing: 0.2px;
+  background: var(--grad-text);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+/* live connection pulse dot (set via data-up on the StatusBar) */
+.dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--neg);
+  box-shadow: 0 0 0 0 rgb(var(--ab-loss) / 0.5);
+}
+.dot[data-up="true"] {
+  background: var(--pos);
+  box-shadow: 0 0 0 2px rgb(var(--ab-gain) / 0.28), 0 0 8px rgb(var(--ab-gain) / 0.6);
+  /* No infinite pulse: a box-shadow animation repaints every frame for the
+     life of the window (see the body::before note above). The glow says
+     "connected"; the dot turns red when the feed drops. */
+}
+
+.stat {
+  display: inline-flex; align-items: baseline; gap: 6px; font-size: 11.5px;
+  padding: 2px 9px; border-radius: 999px; flex: none; white-space: nowrap;
+  background: var(--card-flat); border: 1px solid var(--line);
+}
+.stat .lbl { color: var(--faint); text-transform: uppercase; letter-spacing: 0.6px; font-size: 9.5px; font-weight: 700; }
+.stat b { font-family: var(--sans); font-variant-numeric: tabular-nums; color: var(--fg); font-weight: 700; }
+.stat b.ok { color: var(--pos); }
+.stat b.bad { color: var(--neg); }
+.stat b.warn { color: var(--warn); }
+.stat b.off { color: var(--faint); }
+/* clock pill: ET wall-clock time + a muted "next boundary" countdown */
+.stat.clock b { font-variant-numeric: tabular-nums; }
+.stat .sub { color: var(--muted); font-weight: 500; margin-left: 2px; }
+
+.statusbar .spacer { flex: 1 1 0; min-width: 0; }
+/* The pills sit in one group that may be clipped (never wrapped) on a narrow
+   window; the right-hand controls and the brand never shrink. */
+.stat-group { display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; }
+.statusbar > .brand, .statusbar > .symsearch, .statusbar > .iconbtn, .statusbar > .thememenu-wrap { flex: none; }
+.brand { white-space: nowrap; }
+/* Lower-priority pills drop out below this width so the bar stays one line. */
+@media (max-width: 1180px) {
+  .stat[data-prio="low"] { display: none; }
+}
+
+.iconbtn {
+  background: rgb(var(--ab-text-primary) / 0.04); color: var(--fg);
+  border: 1px solid var(--line2); border-radius: var(--r-sm);
+  padding: 5px 12px; cursor: pointer; font: inherit; font-size: 12px;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+.iconbtn:hover { border-color: var(--accent); box-shadow: var(--glow); background: var(--accent-soft); }
+/* Status-bar icon buttons (sound toggle, API-key gear): compact squares. */
+.soundbtn, .gearbtn { padding: 2px 8px; line-height: 1.3; flex: none; }
+/* Sound still locked in this window: amber so it gets noticed and clicked once. */
+.iconbtn.warn { border-color: var(--warn); color: var(--warn); }
+
+/* symbol search box — "/" or Ctrl+K focuses it from anywhere; Shift+Enter
+   also pops the tape window open on the entered symbol (see StatusBar). */
+.symsearch { display: inline-flex; }
+.symsearch input {
+  background: var(--input-bg); color: var(--fg);
+  border: 1px solid var(--line2); border-radius: var(--r-sm);
+  font: inherit; font-size: 12px; padding: 3px 10px;
+  width: 96px; text-transform: uppercase;
+}
+.symsearch input::placeholder { color: var(--faint); }
+.symsearch input:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* unlock / banner buttons */
+.unlock {
+  margin: 8px 16px 0; padding: 8px 14px; align-self: flex-start;
+  background: var(--grad); color: var(--on-accent); border: none; border-radius: var(--r-sm);
+  cursor: pointer; font: inherit; font-weight: 600;
+  box-shadow: 0 8px 24px -10px rgb(var(--ab-accent) / 0.8);
+  transition: transform 0.12s, box-shadow 0.15s;
+}
+.unlock:hover { transform: translateY(-1px); box-shadow: 0 12px 30px -10px rgb(var(--ab-accent) / 0.9); }
+.unlock.keybanner {
+  background: linear-gradient(120deg, rgb(var(--ab-warn)), rgb(var(--ab-loss)));
+  box-shadow: 0 8px 24px -10px rgb(var(--ab-warn) / 0.7);
+}
+
+/* ================================= tabs ================================= */
+.tabs {
+  display: flex; gap: 5px; padding: 5px 12px; flex-wrap: nowrap; align-items: center;
+  /* Own stacking level so the More menu paints above the tiles below. */
+  position: relative; z-index: 4;
+  background: rgb(var(--ab-bg-base) / 0.45);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line);
+}
+.tab {
+  position: relative;
+  background: rgb(var(--ab-text-primary) / 0.035); color: var(--muted);
+  border: 1px solid var(--line2); border-radius: 999px;
+  padding: 3px 10px; cursor: pointer; font: inherit; font-size: 12px; font-weight: 500; white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+/* A scan matching nothing right now: no badge (ScanTabs omits it), fainter
+   pill, so the live counts are what stand out in a bar of 16 tabs. Tiled
+   (.open) and focused (.active) styling still win. */
+.tab.idle:not(.active):not(.open) { color: var(--faint); border-color: var(--line); }
+.tab.idle:not(.active):not(.open):hover { color: var(--fg); border-color: var(--accent); }
+.tab:hover { color: var(--fg); border-color: var(--accent); background: var(--accent-soft); }
+.tab.active {
+  color: var(--on-accent); border-color: transparent;
+  background: var(--grad);
+  box-shadow: 0 6px 20px -8px rgb(var(--ab-accent) / 0.85);
+}
+/* Live match count per tab: the at-a-glance answer to "is this scan actually
+   matching anything?", since the activity log below pools hits from all scans. */
+.tab-count {
+  display: inline-block; margin-left: 7px; padding: 0 6px;
+  border-radius: 999px; background: rgb(var(--ab-text-primary) / 0.1);
+  font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.tab.active .tab-count { background: rgb(var(--ab-bg-base) / 0.25); color: var(--on-accent); }
+.tab.add { color: var(--faint); border-style: dashed; }
+.tab.add:hover { color: var(--acc-text); border-color: var(--accent-2); background: rgb(var(--ab-accent-hover) / 0.1); }
+/* Window launchers (⧉ Tape / ⧉ Charts), pushed to the tab row's right edge. */
+.tabs-scans { flex: 1 1 0; min-width: 0; position: relative; }
+.tabs-row { display: flex; align-items: center; flex-wrap: nowrap; gap: 5px; }
+.tabs-row > .tab, .tabmore-wrap { flex: none; }
+/* Hidden twin of the tab row, read only to measure natural pill widths (see
+   ScanTabs). Zero-height + clipped, so it neither shows nor widens the page. */
+.tabs-measure {
+  position: absolute; left: 0; top: 0; width: 100%; height: 0; overflow: hidden;
+  display: flex; flex-wrap: nowrap; gap: 5px; white-space: nowrap;
+  visibility: hidden; pointer-events: none;
+}
+.tabs-measure > .tab { flex: none; }
+.tabs-windows { display: flex; align-items: center; gap: 5px; flex: none; }
+.tab.window { color: var(--muted); padding: 3px 8px; font-size: 11.5px; }
+.tab.more { color: var(--fg); }
+.tabmore-wrap { position: relative; display: inline-flex; }
+/* More menu: same popover look as the theme picker's menu (theme-picker.css). */
+.tabmenu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 50;
+  min-width: 240px; max-height: 60vh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 2px;
+  background: var(--glass-strong); border: 1px solid var(--line2);
+  border-radius: var(--r-md); padding: 6px;
+  box-shadow: var(--ab-glass-shadow-strong);
+}
+.tabmenu-item {
+  display: flex; align-items: center; gap: 8px; width: 100%; flex: none;
+  border: 1px solid transparent; background: none; border-radius: var(--r-sm);
+  padding: 5px 8px; cursor: pointer; font: inherit; font-size: 12px;
+  color: var(--muted); text-align: left;
+}
+.tabmenu-item:hover, .tabmenu-item:focus-visible { background: var(--fg-soft); color: var(--fg); outline: none; }
+.tabmenu-item.idle:not(.active):not(.open) { color: var(--faint); }
+.tabmenu-item.open { border-color: var(--accent-2); color: var(--fg); }
+.tabmenu-item.active { background: var(--accent-soft); border-color: var(--accent); color: var(--acc-text); }
+.tabmenu-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tabmenu-add { color: var(--faint); border-top: 1px dashed var(--line2); border-radius: 0 0 var(--r-sm) var(--r-sm); margin-top: 2px; }
+.tab.window:hover { color: var(--acc-text); border-color: var(--accent-2); background: rgb(var(--ab-accent-hover) / 0.1); }
+/* A tab currently tiled open in the main window, distinct from "focused". */
+.tab.open:not(.active) { border-color: var(--accent-2); }
+
+/* =============================== main split ============================= */
+.main { display: flex; flex: 1; min-height: 0; padding: 16px; gap: 16px; }
+.empty {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  color: var(--muted); font-size: 13px;
+  border: 1px dashed var(--line2); border-radius: var(--r);
+  background: var(--card-flat);
+}
+
+/* ============================== tiled scans ============================== */
+.tile-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  grid-auto-rows: 1fr; gap: 12px; overflow: auto;
+}
+.tile {
+  display: flex; flex-direction: column; min-height: 0;
+  border: 1px solid var(--line2); border-radius: var(--r);
+  background: var(--card-flat); overflow: hidden;
+}
+.tile.focused { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.tile-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; border-bottom: 1px solid var(--line);
+  font-size: 12px; font-weight: 600; color: var(--muted); flex-shrink: 0;
+}
+.tile-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+/* Live match count beside the name (LiveGrid's MatchCount) — the grid used to
+   carry this in a title row that also repeated the name. */
+.tile-count { flex: 0 0 auto; color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tile-count.zero { color: var(--faint); }
+.tile-actions { display: flex; gap: 4px; flex-shrink: 0; margin-left: auto; }
+.tile-btn { padding: 2px 7px; font-size: 12px; line-height: 1; }
+
+/* ================================= grid ================================= */
+/* Containerless: a section title + column labels, then a stack of card rows
+   that sit directly on the aurora background (mirrors the reference list). */
+.grid { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+.grid-scroll {
+  flex: 1; overflow: auto; position: relative;
+  padding: 2px 16px 16px; scrollbar-gutter: stable;
+}
+.grid-row { display: flex; }
+
+/* sticky along the vertical axis only (top:0) — it scrolls horizontally WITH
+   the data rows (both share .grid-scroll's one overflow:auto), which is what
+   keeps dragged-wide columns reachable instead of clipped or bleeding out. */
+.grid-row.head {
+  position: sticky; top: 0; z-index: 2;
+  padding: 0 0 10px;
+  background: var(--bg);
+  color: var(--faint);
+  text-transform: uppercase; letter-spacing: 0.7px; font-size: 10.5px; font-weight: 700;
+}
+
+/* each stock is its own soft, rounded card */
+.grid-row.data {
+  align-items: center; height: 44px;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-md);
+  box-shadow: var(--ab-glass-shadow);
+  overflow: hidden;
+  /* note: transform is owned by the virtualizer (inline translateY), so hover
+     feedback uses border/shadow/background rather than a transform lift. */
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+/* Taller card when the optional "chart" column is enabled on the scan — must
+   stay in sync with LiveGrid.tsx's ROW_SLOT_CHART. */
+.grid-row.data.has-chart { height: 132px; }
+.cell.chart { text-align: left; padding: 4px 8px; overflow: hidden; }
+.candle { width: 100%; height: 116px; pointer-events: none; }
+.grid-row.data.clickable:hover {
+  background: var(--row-hover);
+  border-color: rgb(var(--ab-accent) / 0.5);
+  box-shadow: var(--ab-glass-shadow), 0 0 0 1px rgb(var(--ab-accent) / 0.3);
+}
+
+.cell {
+  position: relative; flex: 0 0 92px; padding: 4px 9px; text-align: right; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+  font-family: var(--sans); font-variant-numeric: tabular-nums; font-weight: 600; font-size: 13px;
+}
+.cell.sym {
+  text-align: left; font-weight: 700; font-size: 13.5px;
+  font-family: var(--sans); letter-spacing: 0.2px;
+  background: var(--grad-text); -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.grid-row.head .cell { color: var(--faint); }
+.grid-row.head .cell.sortable { cursor: pointer; user-select: none; transition: color 0.12s; }
+.grid-row.head .cell.sortable:hover { color: var(--acc-text); }
+
+/* draggable column headers: click sorts, drag reorders */
+.grid-row.head .cell.draggable { position: relative; }
+.grid-row.head .cell.draggable:active { cursor: grabbing; }
+.grid-row.head .cell.dragging { opacity: 0.4; }
+/* drop marker on the leading edge of the column being dropped onto */
+.grid-row.head .cell.dropzone::before {
+  content: ""; position: absolute; left: 0; top: -2px; bottom: 6px; width: 2px;
+  background: var(--accent); border-radius: 2px;
+  box-shadow: 0 0 8px rgb(var(--ab-accent) / 0.9);
+}
+
+/* boolean flags (news / halted) — a real dot, sized to be spotted at a glance */
+.flag {
+  display: inline-block; width: 11px; height: 11px; border-radius: 50%;
+  vertical-align: middle;
+}
+.flag.news {
+  background: var(--accent-2);
+  box-shadow: 0 0 0 3px rgb(var(--ab-accent) / 0.22), 0 0 10px rgb(var(--ab-accent-hover) / 0.85);
+  /* Static glow, no infinite pulse: a grid can show dozens of these, and each
+     looping box-shadow animation repainted its row every frame for as long as
+     the window was open (see the body::before note). */
+}
+.flag.halted { background: var(--warn); box-shadow: 0 0 0 3px rgb(var(--ab-warn) / 0.2); }
+/* Activity Log's "News" column: a historical fact (had a headline AT ENTRY),
+   not a live state — so no pulse, unlike the grid's live news dot. */
+.flag.flag-news-hit { background: var(--accent-2); box-shadow: 0 0 0 2px rgb(var(--ab-accent) / 0.22); }
+
+.cell.pos { color: var(--pos); }
+.cell.neg { color: var(--neg); }
+
+/* value-change flash → soft glow pulse */
+@keyframes flashUp {
+  0% { background: rgb(var(--ab-gain) / 0.32); box-shadow: inset 0 0 18px rgb(var(--ab-gain) / 0.25); }
+  100% { background: transparent; box-shadow: none; }
+}
+@keyframes flashDown {
+  0% { background: rgb(var(--ab-loss) / 0.32); box-shadow: inset 0 0 18px rgb(var(--ab-loss) / 0.25); }
+  100% { background: transparent; box-shadow: none; }
+}
+.cell.flash-up { animation: flashUp 0.6s ease-out; border-radius: 6px; }
+.cell.flash-down { animation: flashDown 0.6s ease-out; border-radius: 6px; }
+
+.muted { color: var(--muted); }
+.pad { padding: 18px; }
+
+/* clickable rows */
+.grid-row.data.clickable { cursor: pointer; }
+
+/* ============================ workspace layout =========================== */
+/* gap is 0 throughout: each Splitter carries negative margins that cancel its
+   own footprint, so it sits as a zero-width seam overlapping its neighbors —
+   an 8px drag target with no extra dead space in the layout. */
+.workspace { align-items: stretch; gap: 0; }
+.ws-left { flex: 1 1 56%; min-width: 0; display: flex; flex-direction: column; gap: 0; }
+.ws-left .grid { flex: 1; min-height: 0; }
+.ws-right { flex: 1 1 44%; min-width: 420px; display: flex; flex-direction: column; gap: 0; }
+.ws-right.collapsed { display: none; } /* kept mounted — see App.tsx */
+.ws-right .news { flex: 1 1 auto; min-height: 0; }
+
+/* symbol panel (docked chart, Scanz-style) */
+.sympanel {
+  flex: 0 0 54%; min-height: 0; display: flex; flex-direction: column;
+  background: var(--card-flat); border: 1px solid var(--line); border-radius: var(--r-md);
+  padding: 10px 12px;
+}
+.sympanel-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; flex-wrap: wrap; }
+.sympanel-sym { font-size: 18px; letter-spacing: -0.02em; }
+.sympanel-stat { display: inline-flex; flex-direction: column; gap: 1px; }
+.sympanel-stat label { color: var(--faint); font-size: 9px; text-transform: uppercase; letter-spacing: 0.6px; }
+.sympanel-stat em { font-style: normal; font-size: 13px; font-weight: 600; }
+.sympanel-stat em.pos { color: var(--pos); }
+.sympanel-stat em.neg { color: var(--neg); }
+.sympanel-stat em.warn { color: var(--warn); }
+.sympanel-chart { position: relative; flex: 1; min-height: 0; }
+
+/* fundamentals row — SEC-filed revenue/cash/burn + float, fetched on select */
+.sympanel-fund {
+  display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--line);
+}
+.sympanel-fund .fund-note { font-size: 11.5px; }
+/* divider between the tradability stats (float/borrow) and the SEC figures */
+.sympanel-sep { width: 1px; align-self: stretch; background: var(--line2); margin: 0 2px; }
+.sympanel-stat em.muted { color: var(--faint); font-weight: 500; }
+
+/* Claude's bull-flag setup read (SetupCard) — sits between the fundamentals
+   row and the tape strip, and only when the selected symbol actually has a
+   read. The card itself reuses .regime-card / .regime-* (same shape of
+   content: verdict line, paragraph, bulleted list, footer) and a failed read
+   reuses .news-summary.err, so the quality pill is the only new look: the
+   .trend-chip tints on the .regime-count pill shape. */
+.setup-read { margin-bottom: 8px; }
+.setup-quality {
+  display: inline-block; border-radius: 999px; padding: 1px 8px; margin-right: 6px;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.3px; white-space: nowrap;
+  background: var(--fg-soft); color: var(--muted);
+}
+.setup-quality.pos { background: var(--pos-soft); color: var(--pos); }
+.setup-quality.neg { background: var(--neg-soft); color: var(--neg); }
+
+/* ============================= tape (order flow) ========================= */
+.tape {
+  display: flex; flex-direction: column; gap: 6px;
+  margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--line);
+}
+.tape-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.tape-row .spacer { flex: 1; }
+.tape-metrics { gap: 14px; }
+.tape-verdict { font-size: 12px; font-weight: 800; letter-spacing: 0.4px; }
+.tape-verdict.pos { color: var(--pos); }
+.tape-verdict.neg { color: var(--neg); }
+.tape-verdict.muted { color: var(--muted); }
+
+/* control gauge: fills outward from the centre line, buyers right / sellers left */
+.tape-gauge {
+  position: relative; flex: 0 0 180px; height: 6px;
+  background: var(--fg-soft); border-radius: 999px; overflow: hidden;
+}
+.tape-gauge-mid {
+  position: absolute; left: 50%; top: 0; bottom: 0; width: 1px;
+  background: rgb(var(--ab-text-primary) / 0.25);
+}
+.tape-gauge-fill { position: absolute; top: 0; bottom: 0; transition: left 0.3s, width 0.3s; }
+.tape-gauge-fill.pos { background: var(--pos); }
+.tape-gauge-fill.neg { background: var(--neg); }
+
+.tape-prints { display: flex; gap: 6px; flex-wrap: wrap; }
+.tape-print {
+  font-family: var(--mono); font-size: 10.5px; font-variant-numeric: tabular-nums;
+  padding: 1px 7px; border-radius: 999px;
+  background: rgb(var(--ab-text-primary) / 0.04); color: var(--muted);
+  border: 1px solid var(--line);
+}
+.tape-print.buy { color: var(--pos); border-color: var(--pos-line); background: rgb(var(--ab-gain) / 0.1); }
+.tape-print.sell { color: var(--neg); border-color: var(--neg-line); background: rgb(var(--ab-loss) / 0.1); }
+.news-summary.tape-read { margin-top: 2px; }
+
+/* toolbar (TapeControls) — pause, Claude/Local, voice controls, commentary
+   interval. Reuses .tape-row's flex/gap/wrap + the app-wide .segbtn toggle
+   look everywhere else already uses (timeframe/indicators/showLevels). */
+.tape-toolbar-field {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; color: var(--muted); white-space: nowrap;
+}
+.tape-toolbar-field.chk { cursor: pointer; }
+.tape-toolbar-field select,
+.tape-toolbar-field .commentary-input {
+  background: var(--input-bg); color: var(--fg);
+  border: 1px solid var(--line2); border-radius: var(--r-sm);
+  font: inherit; font-size: 12px; padding: 3px 6px;
+}
+.tape-toolbar-field .commentary-input { width: 52px; }
+.tape-toolbar-field select:focus,
+.tape-toolbar-field .commentary-input:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.tape-toolbar-field .unit { color: var(--faint); }
+
+/* CVD chart + Level 2 ladder + regime-reads timeline, mounted below the core
+   order-flow strip. Wraps to a single column on a narrow docked panel
+   instead of assuming the standalone Python page's full page width. */
+.tape-extra { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 2px; }
+.tape-extra-col { flex: 1 1 260px; min-width: 240px; display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.tape-subhead {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--faint);
+}
+.cvd-chart { display: block; width: 100%; }
+
+/* Claude tape-reading cards (RegimeTimeline) — the reference app's "reads"
+   feed: newest first, capped at 30 by the store, one soft card per regime
+   event with a left border tinted by who's in control. Bounded height so
+   .regime-list's own overflow actually scrolls instead of pushing the panel
+   ever taller as cards accumulate. */
+.regime { display: flex; flex-direction: column; gap: 6px; min-height: 0; max-height: 280px; }
+.regime-head { display: flex; align-items: center; gap: 10px; font-weight: 700; }
+.regime-count {
+  background: var(--fg-soft); color: var(--muted);
+  border-radius: 999px; padding: 1px 8px; font-size: 11px; font-weight: 700;
+}
+.regime-list { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 8px; padding: 2px 2px 8px; }
+.regime-card {
+  padding: 8px 10px;
+  background: var(--card-flat); border: 1px solid var(--line); border-left: 3px solid var(--line2);
+  border-radius: var(--r-md);
+}
+.regime-card.pos { border-left-color: var(--pos); }
+.regime-card.neg { border-left-color: var(--neg); }
+.regime-card.err { border-left-color: var(--neg); background: rgb(var(--ab-loss) / 0.06); }
+.regime-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.regime-verdict { font-size: 11.5px; font-weight: 800; letter-spacing: 0.3px; }
+.regime-verdict.pos { color: var(--pos); }
+.regime-verdict.neg { color: var(--neg); }
+.regime-verdict.muted { color: var(--muted); }
+.regime-verdict.err { color: var(--neg); }
+.regime-when { font-size: 10.5px; color: var(--faint); font-family: var(--mono); white-space: nowrap; }
+.regime-conf { margin-top: 2px; font-size: 11px; color: var(--muted); font-family: var(--mono); }
+.regime-say { margin: 4px 0; line-height: 1.4; }
+.regime-say.err { color: var(--neg); }
+.regime-evidence { margin: 4px 0 0; padding-left: 16px; color: var(--muted); font-size: 12px; }
+.regime-watch { margin-top: 4px; font-size: 11.5px; color: var(--acc-text); }
+.regime-foot {
+  margin-top: 4px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--faint);
+}
+
+/* Level 2 ladder: two-column bid/ask rungs (price + size), or the no-depth
+   fallback when the venue/plan carries no L2 entitlement (mirrors app.js's
+   #dom / .dom .empty). */
+.tape-ladder-empty {
+  color: var(--muted); font-style: italic; font-size: 12px; line-height: 1.5;
+  padding: 4px 2px;
+}
+.tape-ladder {
+  display: flex; flex-direction: column; gap: 1px;
+  font-family: var(--mono); font-size: 11.5px;
+  max-height: 220px; overflow-y: auto;
+}
+.tape-ladder-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 1px 2px; }
+.tape-ladder-row.inside { border-top: 1px solid var(--line2); border-bottom: 1px solid var(--line2); }
+.tape-ladder-bid, .tape-ladder-ask {
+  position: relative; isolation: isolate; display: flex; align-items: center; gap: 6px;
+  padding: 1px 4px;
+}
+.tape-ladder-bid { justify-content: flex-end; }
+.tape-ladder-ask { justify-content: flex-start; }
+.tape-ladder-price { color: var(--muted); font-variant-numeric: tabular-nums; }
+.tape-ladder-size { font-variant-numeric: tabular-nums; }
+.tape-ladder-bid .tape-ladder-size { color: var(--pos); font-weight: 600; }
+.tape-ladder-ask .tape-ladder-size { color: var(--neg); font-weight: 600; }
+/* depth bar, sized by rung's share of the ladder's max size; kept behind the
+   text (z-index -1 inside its own isolated stacking context) */
+.tape-ladder-bar { position: absolute; top: 1px; bottom: 1px; z-index: -1; opacity: 0.16; border-radius: 3px; }
+.tape-ladder-bid .tape-ladder-bar { right: 0; background: var(--pos); }
+.tape-ladder-ask .tape-ladder-bar { left: 0; background: var(--neg); }
+
+/* ============ tape reader pop-out (?pane=tape — TapeReaderView) ============
+   Chart-free layout: stats header + the core order-flow strip, then the two
+   main columns — Level 2 ladder and raw time & sales — each filling the
+   remaining height with its own scroller. These used to stack on a narrow
+   window via flex-wrap, but a WRAPPING flex container sizes each line to its
+   CONTENT, not its container — min-height: 0 on the columns can't bound a
+   content-sized line, so .tape-reader-scroll grew to its full content height
+   (measured 2909px in a 1060px window) and the tape rows painted straight
+   over the CVD / tape-reads strip below. flex-wrap: nowrap (+ overflow:
+   hidden down the .tape-reader -> .tape-reader-cols -> .tape-reader-col
+   chain) keeps the columns on one line so their flex-basis actually bounds
+   to the window; narrow windows stack explicitly via the media query below
+   instead of relying on wrap. */
+.tape-reader { display: flex; flex-direction: column; gap: 6px; min-height: 0; overflow: hidden; }
+.tape-reader .tape { margin-bottom: 0; padding-bottom: 6px; }
+.tape-reader-cols { flex: 1 1 auto; min-height: 0; display: flex; gap: 14px; flex-wrap: nowrap; overflow: hidden; }
+.tape-reader-col {
+  flex: 1 1 280px; min-width: 240px; min-height: 0;
+  display: flex; flex-direction: column; gap: 4px; overflow: hidden;
+}
+.tape-reader-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+@media (max-width: 640px) {
+  .tape-reader-cols { flex-direction: column; }
+  .tape-reader-col { flex: 1 1 0; min-width: 0; }
+}
+/* tall ladder variant: same TapeLadder markup as the docked panel, but as a
+   main column — uncap the docked 220px height and give rows more room */
+.tape-reader-scroll .tape-ladder { max-height: none; font-size: 12.5px; }
+.tape-reader-scroll .tape-ladder-row { padding: 2px 4px; }
+
+/* raw time & sales rows (TapeFeed) — newest at top, colored by aggressor
+   side; block-sized prints (>= the engine's rolling block threshold) render
+   heavier so they jump out of the stream */
+.tape-feed {
+  display: flex; flex-direction: column;
+  font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums;
+}
+.tape-feed-row {
+  display: grid; grid-template-columns: 76px 1fr auto; gap: 12px;
+  padding: 1px 6px; border-radius: 3px; color: var(--muted);
+}
+.tape-feed-row.buy { color: var(--pos); }
+.tape-feed-row.sell { color: var(--neg); }
+.tape-feed-row.block { font-weight: 700; background: rgb(var(--ab-text-primary) / 0.05); }
+.tape-feed-row.block.buy { background: rgb(var(--ab-gain) / 0.1); }
+.tape-feed-row.block.sell { background: rgb(var(--ab-loss) / 0.1); }
+.tape-feed-time { color: var(--faint); }
+.tape-feed-size { text-align: right; }
+.tape-feed-dropped {
+  font-size: 10.5px; color: var(--faint);
+  padding: 2px 6px; border-bottom: 1px dashed var(--line2);
+}
+.tape-feed-empty { padding: 8px 6px; }
+
+.tape-reader-bottom { flex: 0 0 auto; display: flex; gap: 14px; flex-wrap: wrap; }
+.tape-reader-bottom-col {
+  flex: 1 1 260px; min-width: 240px; min-height: 0;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.tape-reader-bottom .regime { max-height: 180px; }
+
+/* activity log — the flexible remainder under the grid's drag-set height */
+.actlog {
+  flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+  background: var(--card-flat); border: 1px solid var(--line); border-radius: var(--r-md);
+}
+.actlog-head { display: flex; align-items: center; gap: 10px; padding: 8px 12px; font-weight: 700; }
+.actlog-badge {
+  background: var(--accent); color: var(--on-accent); border-radius: 4px; padding: 1px 8px;
+  font-size: 11px; font-weight: 700;
+}
+.actlog-note { color: var(--faint); font-size: 11px; font-weight: 500; }
+/* Hits from scans other than the one on screen: kept visible, but clearly not
+   rows that belong in the grid above. */
+.actlog-other td { opacity: 0.5; }
+.actlog-scroll { overflow: auto; flex: 1; }
+.actlog-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; }
+.actlog-table th {
+  position: sticky; top: 0; background: var(--card-flat); text-align: left;
+  color: var(--faint); font-weight: 600; padding: 3px 12px; border-bottom: 1px solid var(--line);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.actlog-table td {
+  padding: 3px 12px; border-bottom: 1px solid var(--line);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.actlog-table tbody tr { cursor: pointer; }
+.actlog-table tbody tr:hover { background: var(--row-hover); }
+.actlog-sym { font-weight: 700; }
+.actlog-table .pos { color: var(--pos); }
+
+/* ============================= resize handles ============================ */
+/* pane splitter — a thin drag bar between two boxes */
+.splitter { flex: 0 0 auto; position: relative; z-index: 3; }
+.splitter::after { content: ""; position: absolute; background: transparent; transition: background 0.12s; }
+.splitter-x { width: 8px; margin: 0 -4px; cursor: col-resize; }
+.splitter-x::after { inset: 0 3px; border-radius: 2px; }
+.splitter-y { height: 8px; margin: -4px 0; cursor: row-resize; }
+.splitter-y::after { inset: 3px 0; border-radius: 2px; }
+.splitter:hover::after, .splitter:active::after { background: var(--accent); opacity: 0.55; }
+
+/* column-width handle — sits on the right edge of a header cell/th */
+.colresizer {
+  position: absolute; top: 0; bottom: 0; right: -5px; width: 10px;
+  cursor: col-resize; z-index: 2;
+}
+.colresizer::after {
+  content: ""; position: absolute; top: 2px; bottom: 2px; left: 4px; width: 2px;
+  border-radius: 2px; background: transparent; transition: background 0.12s;
+}
+.colresizer:hover::after, .colresizer:active::after { background: var(--accent); opacity: 0.7; }
+
+/* while dragging, lock the cursor + block text selection app-wide */
+body.resizing-x, body.resizing-x * { cursor: col-resize !important; user-select: none !important; }
+body.resizing-y, body.resizing-y * { cursor: row-resize !important; user-select: none !important; }
+
+/* news symbol-follow chip */
+.symlock {
+  background: rgb(var(--ab-accent) / 0.2); color: var(--acc-text);
+  border: 1px solid rgb(var(--ab-accent) / 0.45); border-radius: 999px;
+  padding: 2px 10px; font-size: 12px; font-weight: 700; cursor: pointer;
+}
+
+/* ================================= news ================================= */
+.news {
+  flex: 0 0 320px;
+  display: flex; flex-direction: column; min-height: 0;
+}
+.news-head {
+  padding: 2px 4px 12px;
+  color: var(--fg); font-weight: 800; font-size: 17px;
+  letter-spacing: -0.02em;
+}
+.news-list { overflow: auto; padding: 2px 2px 16px; display: flex; flex-direction: column; gap: 10px; }
+/* each headline is its own soft, rounded card (mirrors the reference list) */
+.news-item {
+  display: block; padding: 12px 14px;
+  background: var(--card-flat); border: 1px solid var(--line); border-radius: var(--r-md);
+  border-left: 3px solid transparent;
+  text-decoration: none; color: var(--fg);
+  box-shadow: var(--ab-glass-shadow);
+  transition: transform 0.14s, background 0.15s, box-shadow 0.15s, border-color 0.15s;
+}
+.news-item:hover {
+  background: var(--row-hover); transform: translateY(-1px);
+  box-shadow: var(--ab-glass-shadow-strong);
+}
+.news-tickers {
+  display: inline-block; margin-bottom: 4px; padding: 2px 9px; border-radius: 999px;
+  background: rgb(var(--ab-accent) / 0.16); color: var(--acc-text);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.2px;
+}
+.news-title { margin: 4px 0; line-height: 1.4; font-weight: 600; }
+.news-src { color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+/* RTPR Impact Score (Beta): direction-colored so "worth reading" separates
+   from "skip" at a glance, same palette as the trend chip/badges elsewhere. */
+.impact-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 1px 8px; border-radius: 999px; margin-left: 8px;
+  font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums;
+  border: 1px solid transparent;
+}
+.impact-badge.bullish { background: var(--pos-soft); color: var(--pos); border-color: var(--pos-line); }
+.impact-badge.bearish { background: var(--neg-soft); color: var(--neg); border-color: var(--neg-line); }
+.impact-badge.neutral { background: var(--fg-soft); color: var(--muted); border-color: var(--line2); }
+.impact-event { font-weight: 600; opacity: 0.85; letter-spacing: 0.2px; }
+/* Fresh (≤5 min since publish): a clearly brighter, indigo-tinted box so
+   breaking news separates from the backlog at a glance. Decays via the
+   panel's 30s re-render clock, not a CSS animation, so it can't get stuck. */
+.news-item.fresh {
+  background: linear-gradient(180deg, rgb(var(--ab-accent) / 0.16), rgb(var(--ab-accent) / 0.07));
+  border-color: rgb(var(--ab-accent) / 0.45);
+  box-shadow: 0 6px 22px -10px rgb(var(--ab-accent) / 0.55);
+}
+.news-item.fresh:hover {
+  background: linear-gradient(180deg, rgb(var(--ab-accent) / 0.22), rgb(var(--ab-accent) / 0.10));
+}
+.news-item.fresh .news-ago { color: var(--acc-text); font-weight: 700; }
+
+.news-item.positive { border-left-color: var(--pos); }
+.news-item.positive .news-tickers { background: rgb(var(--ab-gain) / 0.16); color: var(--pos); }
+.news-item.negative { border-left-color: var(--neg); }
+.news-item.negative .news-tickers { background: rgb(var(--ab-loss) / 0.16); color: var(--neg); }
+.news-item.inscan { border-color: var(--accent); }
+
+/* news filter bar */
+.news-head { display: flex; align-items: center; gap: 8px; }
+.news-filter {
+  flex: 1; min-width: 0;
+  background: var(--card-flat); color: var(--fg);
+  border: 1px solid var(--line); border-radius: var(--r-sm, 6px);
+  padding: 3px 8px; font-size: 12px; font-weight: 400;
+}
+.news-filter::placeholder { color: var(--faint); }
+
+/* item internals */
+.news-meta { display: flex; align-items: center; gap: 8px; }
+/* relative age stacked above the actual publish time/date — vertical, so a
+   long historical date (archive keeps 30 days) never widens the row. */
+.news-time {
+  margin-left: auto; flex: 0 0 auto;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
+}
+.news-ago { color: var(--faint); font-size: 11px; font-weight: 600; white-space: nowrap; }
+.news-abs { color: var(--faint); font-size: 10px; opacity: 0.75; white-space: nowrap; }
+.news-title { display: block; }
+.news-title:hover { text-decoration: underline; }
+.news-foot { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.news-foot .spacer { flex: 1; }
+
+/* News summaries — the button/block are Claude-branded indigo by default
+   (".summarize", the un-modified ".news-summary"); a LOCAL auto-summary
+   retints the block neutral via ".news-summary.local" (same modifier-class
+   pattern as ".news-summary.err" below) and the button relabels to "Ask
+   Claude" instead of disappearing (see summaryDisplay in store.ts). */
+.summarize {
+  background: rgb(var(--ab-accent) / 0.14); color: var(--acc-text);
+  border: 1px solid rgb(var(--ab-accent) / 0.35); border-radius: 999px;
+  padding: 2px 10px; font-size: 11px; font-weight: 600; cursor: pointer;
+}
+.summarize:hover:not(:disabled) { background: rgb(var(--ab-accent) / 0.28); }
+.summarize:disabled { opacity: 0.6; cursor: wait; }
+.news-summary {
+  margin-top: 8px; padding: 8px 10px;
+  background: rgb(var(--ab-accent) / 0.08);
+  border-left: 2px solid rgb(var(--ab-accent) / 0.5);
+  border-radius: 0 var(--r-sm, 6px) var(--r-sm, 6px) 0;
+  font-size: 12px; line-height: 1.5; white-space: pre-wrap;
+}
+.news-summary.err { border-left-color: var(--neg); background: rgb(var(--ab-loss) / 0.08); color: var(--neg); }
+.news-summary.local { background: rgb(var(--ab-text-primary) / 0.04); border-left-color: var(--line2); }
+/* LOCAL/CLAUDE source tag — same pill shape as .setup-quality/.impact-badge
+   (muted default, indigo accent for the "claude" modifier); never a new
+   visual language, just this vocabulary applied to a new fact. */
+.summary-tag {
+  display: inline-block; border-radius: 999px; padding: 1px 8px; margin-right: 6px;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.3px; white-space: nowrap;
+  background: var(--fg-soft); color: var(--muted);
+}
+.summary-tag.claude { background: rgb(var(--ab-accent) / 0.16); color: var(--acc-text); }
+
+/* ================================ modals ================================ */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgb(var(--ab-bg-base) / 0.55);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  animation: fadeIn 0.18s ease-out;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.modal {
+  position: relative;
+  background: var(--glass-strong);
+  backdrop-filter: blur(24px) saturate(160%); -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid var(--line2); border-radius: var(--r);
+  padding: 22px 24px; width: 560px; max-height: 86vh; overflow: auto;
+  box-shadow: var(--ab-glass-shadow-strong);
+  animation: popIn 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.3);
+}
+.modal::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px;
+  background: var(--grad); border-radius: var(--r) var(--r) 0 0;
+}
+@keyframes popIn { from { opacity: 0; transform: translateY(8px) scale(0.985); } to { opacity: 1; transform: none; } }
+
+.modal h3 {
+  margin: 0 0 14px; font-size: 16px; font-weight: 700;
+  background: var(--grad-text); -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.modal p.muted { line-height: 1.5; }
+.modal .row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+.modal label { color: var(--muted); font-size: 12.5px; }
+.modal input, .modal select {
+  background: var(--input-bg); color: var(--fg);
+  border: 1px solid var(--line2); border-radius: var(--r-sm); padding: 6px 9px;
+  font: inherit; font-size: 13px; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.modal input:focus, .modal select:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.modal input { flex: 1; }
+.modal input.num { flex: 0 0 70px; }
+.modal .cond select, .modal .cond input { flex: 1; }
+.modal .hint { font-size: 11.5px; }
+.modal select:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.section {
+  margin: 18px 0 8px; padding-top: 12px;
+  border-top: 1px solid var(--line2);
+  color: var(--acc-text); font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.8px;
+}
+
+.cols { display: flex; flex-wrap: wrap; gap: 7px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 11px; border: 1px solid var(--line2); border-radius: 999px;
+  color: var(--muted); cursor: pointer; font-size: 12px;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.chip:hover { color: var(--fg); border-color: var(--accent); }
+.chip.on {
+  color: var(--on-accent); border-color: transparent; background: var(--grad);
+  box-shadow: 0 4px 14px -6px rgb(var(--ab-accent) / 0.8);
+}
+.chip input { display: none; }
+
+.mini {
+  background: rgb(var(--ab-text-primary) / 0.04); color: var(--fg);
+  border: 1px solid var(--line2); border-radius: var(--r-sm);
+  padding: 4px 11px; cursor: pointer; font: inherit; font-size: 12px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.mini:hover { border-color: var(--accent); background: var(--accent-soft); }
+
+.actions { display: flex; align-items: center; gap: 10px; margin-top: 20px; }
+.actions .spacer { flex: 1; }
+.actions button {
+  background: rgb(var(--ab-text-primary) / 0.05); color: var(--fg);
+  border: 1px solid var(--line2); border-radius: var(--r-sm);
+  padding: 7px 16px; cursor: pointer; font: inherit; font-weight: 500;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s, transform 0.12s;
+}
+.actions button:hover { border-color: var(--accent); background: var(--accent-soft); }
+.actions .primary {
+  background: var(--grad); border-color: transparent; color: var(--on-accent); font-weight: 600;
+  box-shadow: 0 8px 24px -10px rgb(var(--ab-accent) / 0.85);
+}
+.actions .primary:hover { transform: translateY(-1px); box-shadow: 0 12px 30px -10px rgb(var(--ab-accent) / 0.95); }
+.actions .danger {
+  background: rgb(var(--ab-loss) / 0.1); border-color: rgb(var(--ab-loss) / 0.5); color: var(--neg);
+}
+.actions .danger:hover { background: rgb(var(--ab-loss) / 0.18); border-color: var(--neg); box-shadow: none; }
+
+/* ====================== click-to-expand full chart ===================== */
+.modal.chartmodal { width: auto; padding: 14px 14px 16px; }
+.chartmodal-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
+.chartmodal-head b {
+  font-size: 18px; font-weight: 700;
+  background: var(--grad-text); -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.chartmodal-head .spacer { flex: 1; }
+.chartmodal-head .x {
+  align-self: center; background: rgb(var(--ab-text-primary) / 0.05); color: var(--fg);
+  border: 1px solid var(--line2); border-radius: var(--r-sm); padding: 3px 11px; cursor: pointer; font: inherit;
+  transition: border-color 0.15s, background 0.15s;
+}
+.chartmodal-head .x:hover { border-color: var(--neg); background: rgb(var(--ab-loss) / 0.12); color: var(--neg); }
+.chartmodal-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+.chartmodal-bar .spacer { flex: 1; }
+.chartmodal-bar .seg {
+  display: inline-flex; gap: 3px; padding: 3px;
+  background: rgb(var(--ab-bg-base) / 0.6); border: 1px solid var(--line); border-radius: 10px;
+}
+.segbtn {
+  background: transparent; color: var(--muted);
+  border: none; border-radius: 7px; padding: 4px 11px; font: inherit; font-size: 12px; cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+}
+.segbtn:hover { color: var(--fg); background: rgb(var(--ab-text-primary) / 0.05); }
+.segbtn.on {
+  background: var(--grad); color: var(--on-accent); font-weight: 600;
+  box-shadow: 0 4px 14px -6px rgb(var(--ab-accent) / 0.8);
+}
+/* Tape pop-out's follow/pin toggle bar (TapePane.tsx) */
+.tape-follow-bar {
+  display: flex; align-items: center; padding: 6px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.chartmodal-body {
+  position: relative; width: 1000px; height: 600px; max-width: 88vw; max-height: 70vh;
+  border: 1px solid var(--line); border-radius: var(--r); overflow: hidden;
+  background: rgb(var(--ab-bg-base) / 0.5);
+}
+.chartmodal-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+
+/* Daily-trend verdict: arrow in the grid, chip in the symbol panel. Colored
+   like a verdict because that's how it's used — up/flat pops follow through,
+   downtrend pops fade (the observation this feature encodes). */
+/* A colored badge, not a bare glyph — this is the decision-aid signal the
+   user asked to have visible at a glance across a full column of rows. */
+.dtrend {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 50%;
+  font-size: 20px; font-weight: 900; line-height: 1;
+}
+.dtrend.up { color: var(--pos); background: rgb(var(--ab-gain) / 0.18); box-shadow: 0 0 0 1px rgb(var(--ab-gain) / 0.3); }
+.dtrend.down { color: var(--neg); background: rgb(var(--ab-loss) / 0.18); box-shadow: 0 0 0 1px rgb(var(--ab-loss) / 0.3); }
+.dtrend.flat { color: var(--faint); background: var(--fg-soft); box-shadow: 0 0 0 1px var(--line2); }
+.trend-chip {
+  display: inline-block; padding: 3px 10px; border-radius: 999px;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.3px;
+  border: 1px solid transparent; white-space: nowrap;
+}
+.trend-chip.up { background: var(--pos-soft); color: var(--pos); border-color: var(--pos-line); }
+.trend-chip.down { background: var(--neg-soft); color: var(--neg); border-color: var(--neg-line); }
+.trend-chip.flat { background: var(--fg-soft); color: var(--muted); border-color: var(--line2); }
+.trend-chip.unknown { background: transparent; color: var(--faint); border-color: var(--line2); }
+
+/* Recurring-hits badge: a stock re-entering the same scan is a different
+   signal than a first pop — amber, to be scannable without shouting. */
+.hits-badge {
+  display: inline-block; padding: 0 7px; border-radius: 999px;
+  background: var(--warn-soft); color: var(--warn);
+  font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+
+/* 9EMA flag stage (market scan, LiveGrid's e9State column). Same palette as
+   the Signal window's state strip so the stage reads the same in both places:
+   BREAKOUT (the impulse — nothing to do yet) muted, FLAT amber "it is
+   forming", READY the accent "armed", LONG the gain colour. Sized for the
+   default 92px column: "BREAKOUT" is the widest word. */
+.e9-badge {
+  display: inline-block; padding: 1px 5px; border-radius: 999px;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.3px; line-height: 1.5;
+  border: 1px solid transparent; white-space: nowrap;
+}
+.e9-badge.idle { color: var(--faint); font-weight: 700; }
+.e9-badge.breakout { background: var(--fg-soft); color: var(--muted); border-color: var(--line2); }
+.e9-badge.flat { background: var(--warn-soft); color: var(--warn); border-color: rgb(var(--ab-warn) / 0.35); }
+.e9-badge.ready { background: var(--accent-soft); color: var(--acc-text); border-color: rgb(var(--ab-accent) / 0.45); }
+.e9-badge.long { background: var(--pos-soft); color: var(--pos); border-color: var(--pos-line); }
+/* The 9 EMA SLAM row (the "9EMA Slam" scan, e9.ts E9_SLAM_BADGE): bearish, the loss colour. */
+.e9-badge.slam { background: var(--neg-soft); color: var(--neg); border-color: var(--neg-line); }
+/* The whole-market 1-minute alert scans (2026-10-07, e9.ts DILDO_BADGE ...
+   BOTTOM_BADGE). Alert 1 of each rule is a SOLID fill in its candle's colour —
+   DILDO green, CLIMAX red — so it can't be read as a soft stage badge or SLAM;
+   alert 2, the "look now" entry prompt (PB, BOTTOM), is a green OUTLINE; the
+   intrabar TOUCH cue is a DASHED amber outline: provisional until the candle
+   closes. */
+.e9-badge.dildo { background: var(--pos); color: var(--bg); border-color: var(--pos); }
+.e9-badge.climax { background: var(--neg); color: var(--bg); border-color: var(--neg); }
+.e9-badge.bbs { background: var(--neg); color: var(--bg); border-color: var(--neg); }
+.e9-badge.bbsform { color: var(--neg); border-color: var(--neg); }
+.e9-badge.power { background: var(--pos); color: var(--bg); border-color: var(--pos); }
+.e9-badge.ign { background: var(--warn); color: var(--bg); border-color: var(--warn); }
+.e9-badge.pb,
+.e9-badge.bottom { background: var(--pos-soft); color: var(--pos); border-color: var(--pos); }
+.e9-badge.touch { background: var(--warn-soft); color: var(--warn); border-color: rgb(var(--ab-warn) / 0.6); border-style: dashed; }
+
+/* Empty grid: name the scan and restate its criteria, so an empty list reads as
+   "nothing meets this bar right now" instead of "the feed is broken". */
+.empty-scan { display: flex; flex-direction: column; gap: 5px; padding: 12px 2px 0; }
+.empty-crit {
+  font-family: var(--mono, ui-monospace, monospace); font-size: 11.5px;
+  color: var(--faint);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; /* full text in the tooltip */
+}
+
+/* ================== charts monitor window (?pane=charts) ================ */
+.charts-toolbar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line);
+}
+/* Separates the wide-monitor presets from the portrait/stacked ones so the
+   two groups read as related-but-distinct choices, not one long row. */
+.charts-toolbar-divider { width: 1px; align-self: stretch; background: var(--line2); margin: 2px 0; }
+.charts-toolbar .seg {
+  display: inline-flex; gap: 3px; padding: 3px;
+  background: rgb(var(--ab-bg-base) / 0.6); border: 1px solid var(--line); border-radius: 10px;
+}
+.charts-body { flex: 1 1 auto; display: flex; min-height: 0; }
+
+/* watchlist sidebar */
+.charts-watchlist {
+  flex: 0 0 260px; min-width: 0;
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 12px 10px;
+  border-right: 1px solid var(--line2);
+  background: var(--panel);
+  overflow: hidden; /* the chip list and each box scroll on their own */
+}
+/* the charts window's sidebar also carries the five-column gainers/decliners
+   boxes (ticker, price, vol, PM×, gain); the signal window's has no boxes */
+.charts-body > .charts-watchlist { flex-basis: 310px; }
+.wl-add {
+  background: rgb(var(--ab-text-primary) / 0.04); color: var(--fg);
+  border: 1px solid var(--line2); border-radius: var(--r-sm);
+  padding: 6px 10px; font: inherit; font-size: 12px;
+  text-transform: uppercase; flex-shrink: 0;
+}
+.wl-add:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.wl-chips { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; max-height: 34vh; overflow-y: auto; }
+.wl-chip {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 11px; border: 1px solid var(--line2); border-radius: 999px;
+  color: var(--fg); font-size: 12.5px; font-weight: 600;
+  cursor: grab; user-select: none;
+  transition: border-color 0.15s, background 0.15s, opacity 0.15s;
+}
+.wl-chip:hover { border-color: var(--accent); background: var(--accent-soft); }
+.wl-chip.dragging { opacity: 0.45; }
+.wl-chip.dropzone { border-color: var(--accent-2); box-shadow: 0 0 0 1px var(--accent-2) inset; }
+.wl-chip .wl-x {
+  margin-left: auto;
+  background: none; border: none; color: var(--faint); cursor: pointer;
+  font: inherit; font-size: 11px; padding: 0 2px;
+}
+.wl-chip .wl-x:hover { color: var(--neg); }
+.wl-hint { font-size: 11px; color: var(--faint); }
+
+/* gainers/decliners lists under the watchlist (SideBoxes.tsx): each box is a
+   scan's top rows as ticker · price · volume · gain, draggable like chips */
+.sideboxes {
+  flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 10px;
+  padding-top: 10px; border-top: 1px solid var(--line2); overflow-y: auto;
+}
+.sidebox {
+  flex: 1 1 0; min-height: 120px; display: flex; flex-direction: column;
+  border: 1px solid var(--line2); border-radius: var(--r-sm); background: var(--card-flat); overflow: hidden;
+}
+.sidebox-head {
+  display: flex; align-items: center; gap: 6px; padding: 5px 8px; flex-shrink: 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted);
+}
+.sidebox-head .t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebox-head .wl-x { margin-left: 0; font-size: 12px; }
+.sidebox-cfg { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 8px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+.sidebox-cfg select {
+  align-self: stretch; background: rgb(var(--ab-text-primary) / 0.04); color: var(--fg);
+  border: 1px solid var(--line2); border-radius: var(--r-sm); padding: 5px 8px; font: inherit; font-size: 12px;
+}
+.sidebox-cfg .seg {
+  display: inline-flex; gap: 3px; padding: 3px;
+  background: rgb(var(--ab-bg-base) / 0.6); border: 1px solid var(--line); border-radius: 10px;
+}
+.sidebox-cfg .segbtn { padding: 3px 9px; font-size: 11.5px; }
+.sidebox-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.sidebox-cols, .sidebox-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) 54px 46px 44px 58px; gap: 4px;
+  padding: 3px 8px; font-size: 11.5px; font-variant-numeric: tabular-nums;
+}
+.sidebox-cols { color: var(--faint); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.6px; padding-top: 5px; }
+.sidebox-cols span:not(:first-child) { text-align: right; }
+.sidebox-row { cursor: grab; border-top: 1px solid var(--line); user-select: none; }
+.sidebox-row:hover { background: var(--accent-soft); }
+.sidebox-row .sb-sym { font-weight: 700; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebox-row .sb-num { text-align: right; font-family: var(--mono); color: var(--fg); }
+.sidebox-row .sb-num.pos { color: var(--pos); }
+.sidebox-row .sb-num.neg { color: var(--neg); }
+.sidebox-empty { padding: 10px 8px; font-size: 11px; color: var(--faint); }
+.sidebox-add { align-self: flex-start; flex-shrink: 0; }
+
+/* 9EMA flag scan list in the Signal window's left bar (FlagScanList.tsx): the
+   same .sideboxes/.sidebox shell and row look as the gainers/decliners boxes
+   above, with its own four columns — ticker, stage badge, distance from the
+   9 EMA, age in the stage. The head carries a scan picker and the per-window
+   mute for that scan's alert sounds. */
+.sidebox-head .flag-scan-sel {
+  flex: 0 1 104px; min-width: 0;
+  background: rgb(var(--ab-text-primary) / 0.04); color: var(--fg);
+  border: 1px solid var(--line2); border-radius: var(--r-sm);
+  padding: 2px 4px; font: inherit; font-size: 11px; font-weight: 600;
+  text-transform: none; letter-spacing: 0;
+}
+.sidebox-head .flag-scan-sel:focus { outline: none; border-color: var(--accent); }
+.sidebox-head .flag-mute { flex: 0 0 auto; }
+.sidebox-head .flag-mute.off { color: var(--faint); }
+.sidebox-cols.e9row, .sidebox-row.e9row {
+  grid-template-columns: minmax(0, 1fr) 68px 46px 38px; align-items: center;
+}
+.sidebox-cols.e9row span:nth-child(1) { padding-left: 10px; }
+.sidebox-cols.e9row span:nth-child(2) { text-align: left; }
+.sidebox-row.e9row { cursor: pointer; }
+.sidebox-row.e9row .sb-sym { position: relative; padding-left: 10px; }
+.sidebox-row.e9row .sb-stage { min-width: 0; line-height: 1; }
+/* a stock already charted in this window: accent text and a dot in the gutter */
+.sidebox-row.on-chart .sb-sym { color: var(--acc-text); }
+.sidebox-row.on-chart .sb-sym::before {
+  content: ''; position: absolute; left: 1px; top: 50%; width: 5px; height: 5px; margin-top: -2.5px;
+  border-radius: 50%; background: var(--accent);
+}
+
+/* The Signal window's left-bar stack (SignalPane): the live flag scan list on
+   top — shrinks to its content, capped at 45% of the bar, scrolling inside —
+   and the signal history (FlagEventList.tsx) taking the rest, scrolling on its
+   own. Both are .sideboxes shells, so the shared shell rules are overridden
+   here (.sidebox's flex 1 1 0 / 120px floor would otherwise make the flag
+   list claim half the bar even when it has two rows). */
+.flag-stack {
+  flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; gap: 10px;
+  padding-top: 10px; border-top: 1px solid var(--line2);
+}
+.flag-stack > .sideboxes { padding-top: 0; border-top: none; overflow: hidden; }
+.flag-stack > .flaglist { flex: 0 1 auto; max-height: 45%; }
+.flag-stack > .flaglist .sidebox { flex: 0 1 auto; min-height: 0; }
+.flag-stack > .flagev { flex: 1 1 0; min-height: 90px; }
+.flag-stack > .flagev .sidebox { flex: 1 1 0; min-height: 0; }
+
+/* signal history (FlagEventList.tsx): time, ticker, signal badge, price */
+/* Tight header: in the 288px bar the title (the only part that shrinks) must
+   keep "Signals · 140" whole next to a wide past-day label ("Wed 30 Sep"). */
+.flagev .sidebox-head { gap: 4px; }
+.flagev .sidebox-head .t { letter-spacing: 0.2px; }
+.flagev-step { display: inline-flex; align-items: center; gap: 0; flex: 0 0 auto; text-transform: none; letter-spacing: 0; }
+.flagev-step .tile-btn { padding: 0 3px; font-size: 14px; line-height: 1.1; }
+.flagev-step .tile-btn:disabled { opacity: 0.3; cursor: default; }
+.flagev-date { min-width: 44px; text-align: center; font-size: 11px; font-weight: 600; color: var(--fg); white-space: nowrap; }
+.sidebox-head .flagev-seg {
+  flex: 0 0 auto; display: inline-flex; gap: 2px; padding: 2px;
+  background: rgb(var(--ab-bg-base) / 0.6); border: 1px solid var(--line); border-radius: 8px;
+  text-transform: none; letter-spacing: 0;
+}
+.flagev-seg .segbtn { padding: 1px 5px; font-size: 10.5px; border-radius: 6px; }
+.sidebox-row.flagev-row {
+  grid-template-columns: 38px minmax(0, 1fr) 62px 52px; align-items: center; cursor: pointer;
+}
+.flagev-row .flagev-time { color: var(--faint); font-family: var(--mono); font-size: 11px; }
+.flagev-row .sb-sym { position: relative; padding-left: 10px; }
+.flagev-row .flagev-kind { min-width: 0; line-height: 1; }
+.flagev-badge {
+  display: inline-block; padding: 1px 5px; border-radius: 999px;
+  font-size: 9.5px; font-weight: 800; letter-spacing: 0.3px; line-height: 1.5;
+  border: 1px solid transparent; white-space: nowrap;
+}
+.flagev-badge.pos { background: var(--pos-soft); color: var(--pos); border-color: var(--pos-line); }
+.flagev-badge.neg { background: var(--neg-soft); color: var(--neg); border-color: var(--neg-line); }
+.flagev-badge.warn { background: var(--warn-soft); color: var(--warn); border-color: rgb(var(--ab-warn) / 0.35); }
+.flagev-badge.muted { background: var(--fg-soft); color: var(--faint); border-color: var(--line2); }
+/* DILDO's own hue: no AfterBell token stands apart from the gold warn badges
+   (CLIMAX, READY, EARLY) in every theme - warm and paper set accent == warn -
+   so a scanner-own blue, deepened on paper for contrast on cream. */
+.flagev-badge.info { --info: 110 168 255; background: rgb(var(--info) / 0.15); color: rgb(var(--info)); border-color: rgb(var(--info) / 0.35); }
+[data-theme='paper'] .flagev-badge.info { --info: 29 78 216; }
+/* the dildo / climax rows: what the rule measured, one line under the row
+   (aligned with the ticker text, cut with an ellipsis; the row's tooltip has
+   it whole). PB CANCELLED / CLIMAX FAILED rows are dead ends: dimmed. */
+.flagev-row .flagev-note {
+  grid-column: 1 / -1; padding-left: 52px; margin-top: -1px;
+  font-size: 10.5px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sidebox-row.flagev-row.lowkey { opacity: 0.6; }
+.sidebox-row.flagev-row.lowkey:hover { opacity: 1; }
+@keyframes flagev-flash { from { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); } to { background: transparent; box-shadow: inset 2px 0 0 transparent; } }
+.sidebox-row.flagev-row.new { animation: flagev-flash 1.5s ease-out; }
+
+/* the chart grid — minmax(0,1fr) tracks + min-height 0 children so canvases
+   shrink correctly inside grid/flex instead of forcing overflow */
+.charts-grid {
+  flex: 1 1 auto; display: grid; gap: 8px; padding: 8px;
+  min-width: 0; min-height: 0;
+  /* A stacked (1×N) preset can ask for more total height than a short window
+     has — scroll instead of silently compressing every cell past readable. */
+  overflow-y: auto;
+}
+.monitor-chart {
+  display: flex; flex-direction: column;
+  min-width: 0; min-height: 140px; /* floor: header + a legible sliver of chart */
+  border: 1px solid var(--line2); border-radius: var(--r-md);
+  background: rgb(var(--ab-bg-base) / 0.5);
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.monitor-chart.dropzone { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset, var(--glow); }
+/* The cell currently linked to TWS / live L2 depth / the live borrow line —
+   set by clicking its chart (see MonitorChart.tsx's isLinked). Same
+   border+inset-ring treatment TileFrame uses for its own "focused" tile. */
+.monitor-chart.linked { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.monitor-head {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.monitor-head .seg {
+  display: inline-flex; gap: 2px; padding: 2px;
+  background: rgb(var(--ab-bg-base) / 0.6); border: 1px solid var(--line); border-radius: 8px;
+}
+.monitor-head .segbtn { padding: 2px 8px; font-size: 11px; }
+.monitor-head .spacer { flex: 1; }
+.monitor-sel {
+  background: rgb(var(--ab-text-primary) / 0.04); color: var(--fg);
+  border: 1px solid var(--line2); border-radius: 8px;
+  padding: 3px 6px; font: inherit; font-size: 12.5px; font-weight: 700;
+}
+.monitor-sel:focus { outline: none; border-color: var(--accent); }
+.monitor-last { font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.monitor-pct { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.monitor-pct.pos { color: var(--pos); }
+.monitor-pct.neg { color: var(--neg); }
+/* TWS-link badge: same pill shape/tone as .hits-badge, distinct color so the
+   two "this cell means something extra" signals don't read as one thing. */
+.monitor-tws-badge {
+  display: inline-block; padding: 0 7px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--acc-text);
+  font-size: 10px; font-weight: 700; letter-spacing: 0.3px;
+}
+/* Auto mode (autoFill.ts): per-cell pin toggle + the NEW badge on a chart Auto
+   just filled. Dim when off, lit when pinned; the badge only fades in. */
+.monitor-pin { padding: 1px 5px; font-size: 11px; line-height: 1.2; opacity: 0.45; }
+.monitor-pin:hover { opacity: 0.9; }
+.monitor-pin.on { opacity: 1; border-color: var(--accent); background: var(--accent-soft); }
+.monitor-new-badge {
+  display: inline-block; padding: 0 7px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--acc-text);
+  font-size: 10px; font-weight: 700; letter-spacing: 0.3px;
+  animation: fadeIn 0.6s ease-out;
+}
+.charts-auto-hint { font-size: 11.5px; }
+/* The chart area. .monitor-body wraps the engine container so the
+   go-to-latest button can float over the chart without sitting inside it:
+   the engine captures the pointer on pointerdown there, which would swallow
+   the button click. isolation keeps the engine canvas layers in their own
+   stacking context, below the button. */
+.monitor-body { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.monitor-canvas { position: relative; flex: 1 1 auto; min-height: 0; isolation: isolate; }
+/* Go-to-latest, as in AfterBell: a round button just left of the price axis
+   and above the time axis, shown only while the latest bar is out of view. */
+.monitor-latest {
+  position: absolute; right: 70px; bottom: 30px; z-index: 1;
+  width: 28px; height: 28px; padding: 0; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--glass-strong); border: 1px solid var(--line2);
+  color: var(--muted); font: 700 15px/1 var(--sans); cursor: pointer;
+  box-shadow: var(--ab-glass-shadow);
+  transition: color 0.15s, border-color 0.15s;
+}
+.monitor-latest:hover { color: var(--acc-text); border-color: var(--accent); }
+.monitor-latest:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.monitor-empty {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+}
+.monitor-empty input {
+  background: rgb(var(--ab-text-primary) / 0.04); color: var(--fg);
+  border: 1px solid var(--line2); border-radius: var(--r-sm);
+  padding: 6px 10px; font: inherit; font-size: 12px;
+  width: 110px; text-align: center; text-transform: uppercase;
+}
+.monitor-empty input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+/* ================== signal window (?pane=signal) ================== */
+/* Toolbar: same shape as .charts-toolbar. Follow/pin toggle, symbol input
+   (reuses .wl-add), tf .seg, last price/day% (reuses .monitor-last/.monitor-pct)
+   and the sound buttons. */
+.signal-toolbar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.signal-toolbar .seg {
+  display: inline-flex; gap: 3px; padding: 3px;
+  background: rgb(var(--ab-bg-base) / 0.6); border: 1px solid var(--line); border-radius: 10px;
+}
+/* Pushes last price / day % / sound buttons to the right of the tf seg,
+   same as .review-toolbar .spacer — SignalPane renders a bare
+   <span className="spacer" />, which is otherwise an unstyled, zero-width
+   flex item (S3). */
+.signal-toolbar .spacer { flex: 1; }
+/* The "Alerts" menu (SignalSwitchMenu): the More menu's popover, one checkbox
+   row per signal, grouped. */
+.signal-switch-menu { min-width: 230px; }
+.signal-switch-group {
+  padding: 6px 8px 2px; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--faint);
+}
+.signal-switch { cursor: pointer; }
+.signal-switch.on { color: var(--fg); }
+.signal-switch input { margin: 0; accent-color: var(--accent); cursor: pointer; }
+.signal-switch-note {
+  margin-top: 4px; padding: 6px 8px 2px; border-top: 1px dashed var(--line2);
+  font-size: 11px; color: var(--faint); white-space: normal;
+}
+
+.signal-body { flex: 1; display: flex; min-height: 0; }
+/* a little wider than the Charts window's chip-only 260px: the flag list under
+   the chips needs room for ticker, stage badge, EMA distance and age */
+.signal-body > .charts-watchlist { flex-basis: 288px; }
+
+/* The grid of signal cells (addendum 2 — the window now shows MULTIPLE
+   stocks): same shape as .charts-grid, one <SignalCell> per layout cell. */
+.signal-grid {
+  flex: 1 1 auto; display: grid; gap: 8px; padding: 8px;
+  min-width: 0; min-height: 0;
+  overflow-y: auto; /* a stacked (1xN) preset can ask for more height than a short window has */
+}
+/* One cell: same shape as .monitor-chart, including the same "linked"
+   treatment (here: this is the ACTIVE cell — the one the detail panel
+   reads) for .active instead of .linked. */
+.signal-cell {
+  display: flex; flex-direction: column;
+  min-width: 0; min-height: 160px; /* floor: head + a legible sliver of chart + the strip */
+  border: 1px solid var(--line2); border-radius: var(--r-md);
+  background: rgb(var(--ab-bg-base) / 0.5);
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.signal-cell.dropzone { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset, var(--glow); }
+.signal-cell.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.signal-cell-head {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.signal-cell-head .seg {
+  display: inline-flex; gap: 2px; padding: 2px;
+  background: rgb(var(--ab-bg-base) / 0.6); border: 1px solid var(--line); border-radius: 8px;
+}
+.signal-cell-head .segbtn { padding: 2px 8px; font-size: 11px; }
+.signal-cell-head .spacer { flex: 1; }
+/* The head now carries two segs (timeframe, and the S | L | S+L side
+   selector — addendum 4) next to the price: keep the segs at their natural
+   width and let the symbol picker / price give way in a narrow 2x2 cell
+   rather than wrapping the head onto a second row. */
+.signal-cell-head { min-width: 0; }
+.signal-cell-head .seg { flex-shrink: 0; }
+.signal-cell-head .monitor-sel { min-width: 0; }
+.signal-cell-head .monitor-last, .signal-cell-head .monitor-pct { flex-shrink: 0; }
+/* Iteration 6 adds a third seg to the head — the setup selector (9EMA flag |
+   Pullback), the widest of them — so a pullback cell in a narrow 2x2 slot can
+   now carry setup + timeframe + side + price. Compact the setup seg's buttons
+   and let the head wrap onto a second row as a last resort, rather than
+   squeezing the symbol picker to nothing (min-width:0 above lets it shrink
+   without limit). */
+.signal-cell-head { flex-wrap: wrap; row-gap: 3px; }
+.signal-cell-head .seg-setup .segbtn { padding: 2px 6px; white-space: nowrap; }
+/* Wraps the chart + strip (everything below the head) so SignalChart's own
+   flex:1 sizing behaves the same as it did as SignalPane's direct child, and
+   the empty-cell placeholder (.monitor-empty, reused) centers the same way
+   it does inside .monitor-chart. */
+.signal-cell-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.signal-strip {
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 3px 8px; border-top: 1px solid var(--line);
+  font-size: 11.5px;
+}
+.signal-strip-headline { display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.signal-strip-plan { flex-shrink: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
+.signal-strip-badge, .signal-side-badge {
+  display: inline-block; padding: 1px 6px; border-radius: 999px;
+  font-size: 9.5px; font-weight: 800; letter-spacing: 0.4px;
+  background: rgb(var(--ab-text-primary) / 0.08); color: var(--muted);
+}
+/* State colours, shared by the strip badge and the panel's side-card badge.
+   Long states use the gain colour (short = loss colour, both = accent) —
+   direction reads from the colour before the word does. */
+.signal-strip[data-state="idle"] .signal-strip-badge,
+.signal-side-badge[data-state="idle"] { color: var(--muted); }
+.signal-strip[data-state="spike"] .signal-strip-badge,
+.signal-strip[data-state="crack"] .signal-strip-badge,
+.signal-strip[data-state="bounce"] .signal-strip-badge,
+.signal-strip[data-state="impulse"] .signal-strip-badge,
+.signal-strip[data-state="flat"] .signal-strip-badge,
+.signal-side-badge[data-state="spike"],
+.signal-side-badge[data-state="crack"],
+.signal-side-badge[data-state="bounce"] {
+  background: rgb(var(--ab-warn) / 0.2); color: rgb(var(--ab-warn));
+}
+.signal-strip[data-state="armed"] .signal-strip-badge,
+.signal-strip[data-state="ready"] .signal-strip-badge,
+.signal-strip[data-state="both"] .signal-strip-badge,
+.signal-side-badge[data-state="armed"],
+.signal-side-badge[data-state="both"] { background: var(--accent-soft); color: var(--acc-text); }
+.signal-strip[data-state="short"] .signal-strip-badge,
+.signal-side-badge[data-state="short"] { background: rgb(var(--ab-loss) / 0.2); color: var(--neg); }
+.signal-strip[data-state="long"] .signal-strip-badge,
+.signal-side-badge[data-state="long"] { background: rgb(var(--ab-gain) / 0.2); color: var(--pos); }
+
+/* The chart pane — SignalChart's own root, mirroring MonitorChart's cell:
+   .signal-canvas is where the engine mounts, .signal-latest is the
+   go-to-latest button floating over it, .signal-scale is the Auto/Manual
+   price-scale toggle floating top-right. */
+.signal-chart {
+  flex: 1 1 auto; min-width: 0; position: relative;
+  display: flex; flex-direction: column;
+}
+.signal-chart.dropzone { box-shadow: 0 0 0 1px var(--accent) inset, var(--glow); }
+/* Inside a grid cell the <section> is the single drop owner (SignalCell.tsx)
+   and paints the highlight on its own border — the chart's duplicate inner
+   ring would double it up, so it is suppressed there. */
+.signal-cell .signal-chart.dropzone { box-shadow: none; }
+.signal-canvas { position: relative; flex: 1 1 auto; min-height: 0; isolation: isolate; }
+.signal-scale { position: absolute; top: 8px; right: 70px; z-index: 1; }
+.signal-latest {
+  position: absolute; right: 70px; bottom: 30px; z-index: 1;
+  width: 28px; height: 28px; padding: 0; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--glass-strong); border: 1px solid var(--line2);
+  color: var(--muted); font: 700 15px/1 var(--sans); cursor: pointer;
+  box-shadow: var(--ab-glass-shadow);
+  transition: color 0.15s, border-color 0.15s;
+}
+.signal-latest:hover { color: var(--acc-text); border-color: var(--accent); }
+.signal-latest:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* The side panel: current stage, plan, evidence, event log, tuning.
+   Iteration 6 — the 9 EMA flag's states reuse the pullback's palette: BREAKOUT
+   (impulse) and FLAT are the amber "wait, it is forming" states (spike / crack /
+   bounce), READY the accent "armed" state, LONG the gain colour. */
+/* The right column is two stacked parts: the AUTO strip (always visible, its
+   detail scrolls inside it) over the active cell's panel (which scrolls). */
+.signal-side {
+  flex: 0 0 340px; min-width: 0; min-height: 0;
+  display: flex; flex-direction: column;
+  border-left: 1px solid var(--line2); background: var(--panel);
+}
+.signal-side-toggle {
+  flex: 0 0 14px; align-self: stretch; padding: 0; border: 0;
+  border-left: 1px solid var(--line2); background: var(--panel);
+  color: var(--muted); font-size: 14px; cursor: pointer;
+}
+.signal-side-toggle:hover { color: var(--accent); background: rgb(var(--ab-text-primary) / 0.05); }
+.signal-panel {
+  flex: 1 1 0; min-height: 96px;
+  overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 12px;
+}
+.signal-empty { margin: auto; color: var(--faint); font-size: 13px; }
+
+.signal-state {
+  padding: 10px 12px; border-radius: var(--r-md); border: 1px solid var(--line2);
+  background: rgb(var(--ab-text-primary) / 0.03);
+  display: flex; flex-direction: column; gap: 4px;
+}
+.signal-state[data-state="idle"] { color: var(--muted); }
+.signal-state[data-state="spike"],
+.signal-state[data-state="crack"],
+.signal-state[data-state="bounce"],
+.signal-state[data-state="impulse"],
+.signal-state[data-state="flat"] {
+  background: rgb(var(--ab-warn) / 0.15); border-color: rgb(var(--ab-warn));
+}
+.signal-state[data-state="armed"],
+.signal-state[data-state="ready"],
+.signal-state[data-state="both"] { background: var(--accent-soft); border-color: var(--accent); }
+.signal-state[data-state="short"] { background: rgb(var(--ab-loss) / 0.15); border-color: var(--neg); }
+.signal-state[data-state="long"] { background: rgb(var(--ab-gain) / 0.15); border-color: var(--pos); }
+.signal-headline { font-size: 14.5px; font-weight: 800; }
+.signal-detail-line { font-size: 11.5px; color: var(--muted); }
+
+/* One card per side in the panel's 'S+L' view (short = loss-coloured edge,
+   long = gain-coloured edge), each with its own read and plan grid. */
+.signal-side-card {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 8px 10px; border: 1px solid var(--line2); border-left-width: 3px; border-radius: var(--r-md);
+  background: rgb(var(--ab-text-primary) / 0.03);
+}
+.signal-side-card[data-side="short"] { border-left-color: var(--neg); }
+.signal-side-card[data-side="long"] { border-left-color: var(--pos); }
+.signal-side-title {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 10.5px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; color: var(--muted);
+}
+.signal-side-headline { font-size: 13px; font-weight: 800; }
+.signal-side-card .signal-plan { margin-top: 4px; }
+
+.signal-plan {
+  display: grid; grid-template-columns: 1fr auto; gap: 4px 12px;
+  padding: 8px 10px; border: 1px solid var(--line2); border-radius: var(--r-sm);
+  background: var(--card-flat); font-size: 12.5px;
+}
+.signal-plan span { color: var(--muted); }
+.signal-plan b { font-variant-numeric: tabular-nums; text-align: right; }
+
+.signal-evidence { display: flex; flex-wrap: wrap; gap: 6px; }
+.signal-chip {
+  padding: 3px 9px; border: 1px solid var(--line2); border-radius: 999px;
+  background: rgb(var(--ab-text-primary) / 0.04);
+  color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums;
+}
+
+.signal-events { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.signal-events-empty { font-size: 11.5px; }
+.signal-event-row { display: flex; gap: 8px; align-items: flex-start; }
+.signal-event-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; background: var(--faint); }
+.signal-event-dot.pos { background: var(--pos); }
+.signal-event-dot.neg { background: var(--neg); }
+.signal-event-body { min-width: 0; }
+.signal-event-head { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.signal-event-note { font-size: 11px; margin-top: 2px; }
+/* S / L side tag on an events-list row; spike/crack context rows get none. */
+.signal-event-tag {
+  display: inline-block; min-width: 14px; margin-right: 6px; padding: 0 3px;
+  border: 1px solid var(--line2); border-radius: 4px;
+  font-size: 9.5px; font-weight: 800; text-align: center; color: var(--muted);
+}
+.signal-event-tag[data-side="short"] { color: var(--neg); }
+.signal-event-tag[data-side="long"] { color: var(--pos); }
+
+.signal-tuning { border-top: 1px solid var(--line2); padding-top: 8px; flex-shrink: 0; }
+.signal-tuning summary { cursor: pointer; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
+.signal-tuning-body { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; }
+.signal-tuning-field { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
+.signal-tuning-field input[type="number"] {
+  width: 70px; background: rgb(var(--ab-text-primary) / 0.04); color: var(--fg);
+  border: 1px solid var(--line2); border-radius: var(--r-sm); padding: 3px 6px; font: inherit;
+}
+.signal-tuning-checkbox input { width: auto; }
+
+/* ============ today's blacklist (BlacklistPanel.tsx) ============
+   Heads the Signal window's right column: symbols whose alerts are silenced
+   today (cleared at 00:00 ET); the Day Log flags them. */
+.bl-panel {
+  flex: 0 0 auto; display: flex; flex-direction: column; gap: 5px; padding: 8px 12px;
+  border-bottom: 1px solid var(--line2);
+  background: rgb(var(--ab-bg-base) / 0.35);
+}
+.bl-sec { font-size: 10.5px; font-weight: 800; letter-spacing: 0.7px; text-transform: uppercase; color: var(--faint); }
+.bl-none { font-size: 11.5px; }
+.bl-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 11.5px; }
+.bl-input { width: 80px; padding: 2px 6px; font-size: 11.5px; text-transform: uppercase; }
+.bl-chip {
+  display: inline-flex; align-items: center; gap: 2px; padding: 1px 2px 1px 7px;
+  border: 1px solid var(--line2); border-left: 3px solid var(--neg); border-radius: var(--r-sm);
+  background: var(--card-flat); font-weight: 700;
+}
+.bl-x { padding: 0 5px; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 13px; line-height: 1; }
+.bl-x:hover { color: var(--neg); }
+
+/* Portrait: a tall, narrow window has height to spare — stack the panel
+   under the chart instead of squeezing both into a thin horizontal split. */
+@media (max-aspect-ratio: 1/1) {
+  .signal-body { flex-direction: column; }
+  .signal-side { flex: 0 0 42%; border-left: none; border-top: 1px solid var(--line2); }
+  /* The watchlist sidebar is a column of chips beside the grid, but with the
+     body stacked its `flex: 0 0 260px` basis becomes a HEIGHT: a 260px-tall
+     full-width band that takes a fifth of a portrait window and pushes a 1x4
+     preset's rows under their 160px floor (the grid then scrolls). Make it a
+     short band instead — sized to its content, capped at 176px — with the
+     chips wrapping in rows so a long watchlist stays reachable inside the cap
+     (a percentage cap would GROW with the body, and .wl-chips's own
+     34vh max-height would overflow a capped aside that clips with
+     overflow:hidden, hiding the lower chips). Scoped to .signal-body so the
+     Charts window's own watchlist is untouched. */
+  .signal-body > .charts-watchlist { flex: 0 0 auto; max-height: 176px; border-right: none; border-bottom: 1px solid var(--line2); }
+  .signal-body > .charts-watchlist .wl-chips { flex: 1 1 auto; min-height: 0; max-height: none; flex-direction: row; flex-wrap: wrap; align-content: flex-start; }
+  /* With the 9EMA flag list in the sidebar the band is two columns — the
+     symbol input and chips on the left, the flag list on the right — and a
+     little taller than the chips alone needed (140px -> 176px: about four list
+     rows plus its head; the list scrolls inside it). */
+  .signal-body > .charts-watchlist {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); grid-template-rows: auto minmax(0, 1fr);
+    column-gap: 10px; row-gap: 6px;
+  }
+  .signal-body > .charts-watchlist > .wl-add { grid-column: 1; grid-row: 1; }
+  .signal-body > .charts-watchlist > .wl-chips { grid-column: 1; grid-row: 2; }
+  .signal-body > .charts-watchlist > .flag-stack { grid-column: 2; grid-row: 1 / span 2; padding-top: 0; border-top: none; min-height: 140px; } /* the stack sets the band's height (up to the 176px cap), not the chips */
+}
+
+/* ================= morning review window (?pane=review) ================= */
+/* Toolbar reuses .seg/.segbtn (session + sort toggles) verbatim. */
+.review-toolbar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.review-toolbar .spacer { flex: 1; }
+.review-date-sel {
+  background: rgb(var(--ab-text-primary) / 0.04); color: var(--fg);
+  border: 1px solid var(--line2); border-radius: var(--r-sm);
+  padding: 5px 9px; font: inherit; font-size: 12.5px; font-weight: 600;
+}
+.review-date-sel:focus { outline: none; border-color: var(--accent); }
+.review-date-sel:disabled { color: var(--faint); cursor: not-allowed; }
+.review-minvol {
+  display: flex; align-items: center; gap: 6px;
+  color: var(--muted); font-size: 11.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.4px;
+}
+.review-minvol input {
+  background: rgb(var(--ab-text-primary) / 0.04); color: var(--fg);
+  border: 1px solid var(--line2); border-radius: var(--r-sm);
+  padding: 5px 8px; font: inherit; font-size: 12px;
+  width: 92px; text-transform: none;
+}
+.review-minvol input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.review-loading { font-size: 11.5px; font-style: italic; }
+.review-hint { font-size: 11.5px; white-space: nowrap; }
+
+/* Table: same grid-row/cell vocabulary as LiveGrid (row hover, tone classes,
+   sym gradient text) — a plain non-virtualized stack, capped at the top 300
+   rows by the pane's own sort, so no virtualizer is needed. */
+.review-scroll { flex: 1; overflow: auto; padding: 10px 16px 16px; scrollbar-gutter: stable; }
+.grid-row.data.review-row { height: 38px; }
+.review-footer { padding: 10px 4px 2px; font-size: 11.5px; }
+
+/* ================= Day Log window (?pane=daylog) ================= */
+/* Toolbar reuses .review-toolbar / .seg verbatim, the alert table the
+   .grid-row vocabulary, the summary and movers cards are plain tables. */
+.daylog-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.daylog-top { display: flex; gap: 14px; padding: 10px 16px 0; align-items: flex-start; flex-wrap: wrap; }
+.daylog-card { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 6px 10px 8px; min-width: 260px; max-height: 210px; overflow: auto; }
+.daylog-card h4 { margin: 0 0 4px; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); }
+.daylog-movers { flex: 1; min-width: 330px; }
+.daylog-table { border-collapse: collapse; font-size: 12px; width: 100%; }
+.daylog-table th { text-align: left; font-weight: 600; color: var(--muted); padding: 2px 10px 2px 0; font-size: 11px; }
+.daylog-table td { padding: 2px 10px 2px 0; white-space: nowrap; }
+.daylog-table tr.clickable { cursor: pointer; }
+.daylog-table tr.clickable:hover td { background: rgb(var(--ab-text-primary) / 0.05); }
+.daylog-table tr.sel td { background: var(--accent-soft); }
+.daylog-hl { max-width: 360px; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+.daylog-empty { font-size: 12px; padding: 4px 0; }
+.daylog-search {
+  background: rgb(var(--ab-text-primary) / 0.04); color: var(--fg);
+  border: 1px solid var(--line2); border-radius: var(--r-sm);
+  padding: 5px 9px; font: inherit; font-size: 12.5px; width: 120px;
+}
+.daylog-search:focus { outline: none; border-color: var(--accent); }
+.daylog-err { font-size: 12px; }
+.daylog-scroll { flex: 1; overflow: auto; padding: 10px 16px 16px; scrollbar-gutter: stable; }
+.grid-row.daylog-row { min-width: 1500px; }
+.grid-row.data.daylog-row { height: 30px; }
+.daylog-h { cursor: pointer; user-select: none; }
+.daylog-h.sorted { color: var(--fg); }
+.daylog-note, .daylog-note-h { flex: 1 1 380px; min-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.daylog-bl { opacity: 0.55; }
+
+/* ================================ toasts ================================ */
+.toasts {
+  position: fixed; bottom: 18px; right: 18px; z-index: 60;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.toast {
+  background: var(--glass-strong);
+  backdrop-filter: blur(18px) saturate(150%); -webkit-backdrop-filter: blur(18px) saturate(150%);
+  border: 1px solid var(--line2); border-left: 3px solid transparent;
+  border-image: var(--grad) 1; border-left-width: 3px;
+  border-radius: var(--r-sm); padding: 10px 14px;
+  box-shadow: var(--ab-glass-shadow-strong);
+  animation: toastIn 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  font-size: 12.5px;
+}
+@keyframes toastIn { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+/* Green Dildo with a headline in the hour before it: 'NEWS 10s' (dildoNews.ts). */
+.flagev-badge.early-badge { margin-left: 4px; background: var(--pos-soft); color: var(--pos); border-color: var(--pos-line); }
+.flagev-badge.news-badge { margin-left: 4px; background: var(--warn-soft); color: var(--warn); border-color: rgb(var(--ab-warn) / 0.35); }
+
+/* ================= Order Ticket window (?pane=order) ================= */
+.oticket { display: flex; flex-direction: column; gap: 8px; padding: 26px 12px 10px; height: 100vh; box-sizing: border-box; font-family: var(--sans); font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--fg); background: var(--card-flat); overflow: hidden; }
+.ot-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ot-sym { font-weight: 800; font-size: 17px; letter-spacing: -0.02em; }
+.ot-sym.none { color: var(--faint); }
+.ot-src { color: var(--faint); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 700; padding: 1px 7px; border: 1px solid var(--line); border-radius: 999px; }
+.ot-src:empty { display: none; }
+.ot-spacer { flex: 1; }
+.ot-badge { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; padding: 2px 8px; border-radius: 999px; }
+.ot-badge.live { background: var(--neg); color: var(--on-accent); }
+.ot-badge.paper { background: var(--accent-soft); color: var(--accent); }
+.ot-quote { display: flex; gap: 6px; flex-wrap: wrap; }
+.ot-qi { display: inline-flex; align-items: baseline; gap: 6px; font-size: 11.5px; padding: 2px 9px; border-radius: 999px; white-space: nowrap; background: var(--card-flat); border: 1px solid var(--line); }
+.ot-lbl { color: var(--faint); text-transform: uppercase; letter-spacing: 0.6px; font-size: 9.5px; font-weight: 700; }
+.ot-qi b { font-variant-numeric: tabular-nums; color: var(--fg); font-weight: 700; }
+.ot-qi.ot-stale b { color: var(--warn); }
+.ot-qi .ot-stale-sfx { color: var(--faint); font-size: 9.5px; }
+.ot-qi.ot-avail { color: var(--muted); }
+.ot-entry, .ot-settings { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
+.ot-entry label, .ot-settings label { display: flex; flex-direction: column; gap: 3px; color: var(--faint); text-transform: uppercase; letter-spacing: 0.6px; font-size: 9.5px; font-weight: 700; }
+.ot-entry input, .ot-settings input { background: var(--input-bg); color: var(--fg); border: 1px solid var(--line2); border-radius: var(--r-sm); padding: 5px 8px; font: inherit; font-size: 12.5px; font-weight: 500; letter-spacing: 0; text-transform: none; font-variant-numeric: tabular-nums; text-align: right; outline: none; min-width: 0; box-sizing: border-box; transition: border-color 0.15s, box-shadow 0.15s; }
+.ot-entry input { width: 96px; }
+.ot-settings input { width: 64px; }
+.ot-entry input:focus, .ot-settings input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.ot-entry input.ot-derived { color: var(--faint); border-style: dashed; }
+.ot-settings input:disabled { opacity: 0.5; }
+.ot-qty { color: var(--muted); font-size: 12px; padding: 6px 0; white-space: nowrap; }
+.ot-qty .ot-eq { color: var(--faint); margin-right: 3px; }
+.ot-settings .ot-mini { align-self: flex-end; border-color: var(--accent); color: var(--accent); padding: 5px 12px; font-size: 12px; }
+.ot-settings .ot-mini:hover { background: var(--accent-soft); }
+.ot-sides { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ot-confirm { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ot-confirm-text { flex-basis: 100%; box-sizing: border-box; font-weight: 600; font-size: 12.5px; background: var(--card-flat); border: 1px solid var(--line2); border-radius: var(--r-sm); padding: 6px 8px; }
+.ot-margin { flex-basis: 100%; font-size: 11px; color: var(--muted); }
+.ot-margin.over { color: var(--neg); font-weight: 700; }
+.ot-margin.warn { color: var(--warn); }
+.ot-preview { font-size: 11px; color: var(--muted); }
+/* Stat tiles above BUY/SELL: big tabular numbers, 6 across (3 x 2 when narrow). */
+.ot-tiles { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+@media (max-width: 560px) { .ot-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.ot-tile { display: flex; flex-direction: column; gap: 1px; min-width: 0; padding: 5px 8px; border: 1px solid var(--line2); border-radius: var(--r-sm); background: var(--card-flat); }
+.ot-tile-cap { color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; font-size: 9.5px; font-weight: 700; white-space: nowrap; display: flex; gap: 5px; align-items: center; }
+.ot-tile-tag { text-transform: none; letter-spacing: 0; font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 0 5px; }
+.ot-tile-val { color: var(--fg); font-size: 21px; font-weight: 600; line-height: 1.15; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ot-tile-sub { color: var(--muted); font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ot-tile.amber { border-color: var(--warn); }
+.ot-tile.amber .ot-tile-val, .ot-tile.amber .ot-tile-sub { color: var(--warn); }
+.ot-tile.red { border-color: var(--neg); background: var(--neg-soft); }
+.ot-tile.red .ot-tile-val { color: var(--neg); }
+.ot-tile.muted .ot-tile-val { color: var(--faint); font-size: 16px; }
+.ot-sl { color: var(--warn); }
+.ot-sl.off { color: var(--faint); text-decoration: line-through; }
+.ot-sl.triggered, .ot-sl.exiting { color: var(--neg); font-weight: 700; }
+.ot-x.ot-sl-x { margin-left: 4px; color: var(--warn); border-color: var(--line2); }
+.ot-preview.na { color: var(--warn); }
+.ot-tprow { flex-basis: 100%; display: flex; align-items: center; gap: 8px; }
+.ot-tp-cap { color: var(--faint); text-transform: uppercase; letter-spacing: 0.6px; font-size: 9.5px; font-weight: 700; }
+.ot-tprow .seg { display: inline-flex; gap: 3px; padding: 3px; background: rgb(var(--ab-bg-base) / 0.6); border: 1px solid var(--line); border-radius: 10px; }
+.ot-tprow .segbtn { padding: 3px 10px; font-size: 11.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ot-btn { flex: 1 1 90px; height: 38px; padding: 0 10px; font: inherit; font-size: 13px; font-weight: 800; letter-spacing: 0.06em; border: 1px solid var(--line2); border-radius: var(--r-sm); background: transparent; color: var(--muted); cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s; }
+.ot-btn:not(:disabled):hover { color: var(--fg); }
+.ot-btn.buy { background: var(--pos-soft); color: var(--pos); border-color: var(--pos-line); }
+.ot-btn.sell { background: var(--neg-soft); color: var(--neg); border-color: var(--neg-line); }
+.ot-btn.buy:not(:disabled):hover { background: var(--pos); color: var(--on-accent); border-color: var(--pos); box-shadow: 0 0 14px -2px rgb(var(--ab-gain) / 0.6); }
+.ot-btn.sell:not(:disabled):hover { background: var(--neg); color: var(--on-accent); border-color: var(--neg); box-shadow: 0 0 14px -2px rgb(var(--ab-loss) / 0.6); }
+.ot-slrow input { background: var(--input-bg); color: var(--fg); border: 1px solid var(--line2); border-radius: var(--r-sm); padding: 3px 6px; font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; text-align: right; outline: none; width: 52px; box-sizing: border-box; }
+.ot-slrow input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.ot-slrow input:disabled { opacity: 0.4; }
+.ot-qi.ot-age-red, .ot-qi.ot-age-red b { color: var(--neg); }
+.ot-qi b.ot-loading { color: var(--warn); font-weight: 600; }
+.ot-risk-warn { color: var(--warn); font-size: 11px; }
+/* A+ Power Setup: risk x1.5 (on = applied; click to override) */
+.ot-aplus { border: 1px solid var(--warn); border-radius: 3px; font-weight: 600; white-space: nowrap; }
+.ot-aplus:not(.on) { opacity: 0.6; text-decoration: line-through; }
+.ot-badge.ot-ps { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent); }
+.ot-pslabel { color: var(--accent); font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+.ot-follow { color: var(--muted); font-size: 10.5px; white-space: nowrap; }
+.ot-slpct { display: inline-flex; align-items: center; gap: 6px; }
+.ot-actrow { flex-basis: 100%; display: flex; gap: 8px; }
+.ot-btn.close { color: var(--neg); border-color: var(--neg-line); }
+.ot-btn.close:not(:disabled):hover { background: var(--neg-soft); border-color: var(--neg); }
+.ot-btn.tobe { color: var(--warn); border-color: var(--warn); }
+.ot-btn.tobe:not(:disabled):hover { background: rgb(var(--ab-text-primary) / 0.05); color: var(--fg); }
+.ot-btn.cancelsym:not(:disabled):hover { background: rgb(var(--ab-text-primary) / 0.05); }
+.ot-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.ot-mini { font: inherit; font-size: 12px; cursor: pointer; background: rgb(var(--ab-text-primary) / 0.04); color: var(--fg); border: 1px solid var(--line2); border-radius: var(--r-sm); padding: 4px 10px; transition: border-color 0.15s, background 0.15s; }
+.ot-mini:not(:disabled):hover { border-color: var(--accent); background: var(--accent-soft); }
+/* CANCEL ALL: same red outline as the per-order CANCEL pills */
+.ot-orders > .ot-mini { align-self: flex-start; margin-top: 4px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; padding: 2px 10px; border-radius: 999px; color: var(--neg); border-color: var(--neg-line); background: transparent; }
+.ot-orders > .ot-mini:not(:disabled):hover { background: var(--neg-soft); border-color: var(--neg); }
+/* On the confirm step Confirm is THE action: solid, not tinted like idle BUY/SELL */
+.ot-confirm .ot-btn.buy:not(:disabled) { background: var(--pos); color: var(--on-accent); border-color: var(--pos); }
+.ot-confirm .ot-btn.sell:not(:disabled) { background: var(--neg); color: var(--on-accent); border-color: var(--neg); }
+.ot-mini:disabled { opacity: 0.4; cursor: not-allowed; }
+.ot-head .ot-mini { padding: 2px 8px; }
+.ot-orders { flex: 1; min-height: 0; overflow-y: auto; font-family: var(--mono); font-size: 11px; }
+.ot-order { display: flex; align-items: center; gap: 6px; white-space: nowrap; padding: 3px 0; border-bottom: 1px solid var(--line); }
+.ot-order.done { color: var(--faint); }
+.ot-order .pos, .ot-order .neg { font-size: 9.5px; font-weight: 800; padding: 0 5px; border-radius: 999px; }
+.ot-order .pos { color: var(--pos); background: var(--pos-soft); }
+.ot-order .neg { color: var(--neg); background: var(--neg-soft); }
+.ot-x { margin-left: auto; font: inherit; font-size: 9.5px; font-weight: 700; letter-spacing: 0.4px; padding: 0 7px; border: 1px solid var(--neg-line); color: var(--neg); background: transparent; border-radius: 999px; cursor: pointer; }
+.ot-x:hover:not(:disabled) { background: var(--neg-soft); border-color: var(--neg); }
+.ot-x:disabled { opacity: 0.4; cursor: not-allowed; }
+.ot-status { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ot-status.connected { color: var(--pos); }
+.ot-status.connected::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--pos); margin-right: 6px; vertical-align: 1px; }
+.ot-status.lost, .ot-status.error, .ot-status.has-err { color: var(--neg); background: rgb(var(--ab-loss) / 0.12); border: 1px solid rgb(var(--ab-loss) / 0.35); border-radius: var(--r-sm); padding: 5px 8px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ot-status.has-err::before, .ot-status.lost::before, .ot-status.error::before { display: none; }
+
+/* ---- 1920s exchange clocks (charts sidebar, components/ExchangeClocks.tsx) ---- */
+.xc { margin-top: auto; flex-shrink: 0; display: flex; flex-direction: column; gap: 4px; }
+.xc-toggle {
+  align-self: flex-start; background: none; border: none; padding: 0 2px; cursor: pointer;
+  color: var(--faint); font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px;
+}
+.xc-toggle:hover { color: var(--fg); }
+.xc-body { display: flex; flex-direction: column; gap: 10px; }
+.xc-clock { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.xc-face { width: 100%; max-width: 170px; height: auto; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.45)); }
+.xc-numeral { font-family: Georgia, "Book Antiqua", "Palatino Linotype", serif; font-size: 13px; fill: #2a1d0a; font-weight: 700; }
+.xc-plaque {
+  font-family: Georgia, "Book Antiqua", "Palatino Linotype", serif; font-size: 11px; font-weight: 700;
+  letter-spacing: 3px; padding: 2px 12px; border-radius: 2px;
+  color: #2a1d0a; background: linear-gradient(180deg, #f3dc94, #b8913d 55%, #e3c370);
+  border: 1px solid #6b4e1c; box-shadow: inset 0 1px 0 rgba(255,255,255,0.4);
+}
+.xc-digital {
+  font-family: Georgia, "Book Antiqua", "Palatino Linotype", serif; font-size: 22px; font-weight: 700;
+  font-variant-numeric: tabular-nums lining-nums; color: var(--fg); letter-spacing: 1px; line-height: 1.1;
+}
+.xc-meta { display: flex; gap: 6px; align-items: center; font-size: 10px; color: var(--muted); letter-spacing: 0.8px; }
+.xc-tag { padding: 0 5px; border-radius: 2px; border: 1px solid var(--line2); font-weight: 700; }
+.xc-tag-market { color: var(--up, #3fb950); border-color: currentColor; }
+.xc-tag-pre, .xc-tag-after { color: #d4a72c; border-color: currentColor; }
+
+/* Native <select> dropdown lists: WebView2 draws the open list with the OS
+   (light) colours unless the options are styled, which left grey text on a
+   white background. Use the theme's solid surface + primary text everywhere. */
+select option,
+select optgroup {
+  background-color: var(--panel-solid);
+  color: var(--fg);
+}
+select option:checked {
+  background-color: rgb(var(--ab-text-primary) / 0.18);
+  color: var(--fg);
+}
+select option:disabled {
+  color: rgb(var(--ab-text-primary) / 0.45);
+}
+select optgroup {
+  font-weight: 600;
+  font-style: normal;
+  color: var(--accent, var(--fg));
+}
+select optgroup option { font-weight: 400; color: var(--fg); }
+.flagev-filter { padding: 3px 6px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 3px; }
+.flagev-chips { display: flex; flex-wrap: wrap; gap: 3px; }
+.flagev-chip { font-size: 10px; padding: 0 5px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--faint); cursor: pointer; }
+.flagev-chip.on { color: var(--fg); border-color: var(--fg); background: rgb(var(--ab-bg-base) / 0.6); }
+.flagev-fields { display: flex; align-items: center; gap: 4px; font-size: 10.5px; color: var(--faint); flex-wrap: wrap; }
+.flagev-q { width: 64px; font-size: 11px; }
+.flagev-t { width: 66px; font-size: 11px; }
+.flagev-count { margin-left: auto; font-family: var(--mono); }
+
+/* Order ticket settings: an overlay panel with titled sections (2 columns, 1 when narrow). */
+.ot-setwrap { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-start; justify-content: center; padding: 12px; background: rgb(0 0 0 / 0.35); overflow-y: auto; }
+.ot-setpanel { width: 100%; max-width: 720px; box-sizing: border-box; background: var(--bg, var(--card-flat)); background-color: rgb(var(--ab-bg-base)); color: var(--fg); border: 1px solid var(--line2); border-radius: 10px; padding: 12px 14px; box-shadow: 0 12px 40px -8px rgb(0 0 0 / 0.45); }
+.ot-sethead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.ot-settitle { font-weight: 800; font-size: 14px; }
+.ot-setclose { font: inherit; font-size: 14px; line-height: 1; width: 28px; height: 28px; border-radius: 999px; border: 1px solid var(--line2); background: transparent; color: var(--muted); cursor: pointer; }
+.ot-setclose:hover { color: var(--fg); border-color: var(--accent); }
+.ot-setgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 600px) { .ot-setgrid { grid-template-columns: 1fr; } }
+.ot-setsec { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ot-setsec h3 { margin: 0 0 2px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.7px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.ot-setrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
+.ot-setlbl { font-size: 12px; color: var(--fg); white-space: nowrap; display: inline-flex; gap: 6px; align-items: center; }
+.ot-setin { display: inline-flex; align-items: center; gap: 4px; }
+.ot-setin input { width: 56px; box-sizing: border-box; background: var(--input-bg); color: var(--fg); border: 1px solid var(--line2); border-radius: var(--r-sm); padding: 4px 6px; font: inherit; font-size: 12.5px; font-variant-numeric: tabular-nums; text-align: right; outline: none; }
+.ot-setin input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.ot-setin input:disabled { opacity: 0.5; }
+.ot-unit { color: var(--muted); font-size: 11px; min-width: 8px; }
+.ot-sethint { font-size: 10.5px; color: var(--muted); line-height: 1.3; }
+.ot-setstate { font-size: 9.5px; font-weight: 800; text-transform: uppercase; padding: 0 6px; border-radius: 999px; color: var(--faint); border: 1px solid var(--line2); letter-spacing: 0.4px; }
+.ot-setstate.on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.ot-setsec .seg { display: inline-flex; gap: 3px; padding: 3px; border: 1px solid var(--line); border-radius: 10px; }
+.ot-setsec .segbtn { padding: 3px 9px; font-size: 11.5px; white-space: nowrap; }
+.ot-setfoot { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 10px; }
+.ot-setsaved { color: var(--pos); font-size: 12px; font-weight: 700; }
+.ot-setsave { padding: 5px 18px; border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.ot-setrow { flex-wrap: wrap; row-gap: 4px; }
+.ot-setin .ot-setin input { width: 46px; }
+.ot-setin .ot-setin { gap: 2px; }
+.flagev-chip.empty { opacity: 0.45; }
+.flagev-chip.empty.on { opacity: 1; }
+.flagev-chip-n { margin-left: 4px; font-size: 0.85em; opacity: 0.75; font-variant-numeric: tabular-nums; }
+.ot-tp-fixed { font-weight: 700; color: var(--accent); padding: 3px 10px; border: 1px solid var(--accent); border-radius: var(--r-sm); font-variant-numeric: tabular-nums; }
+
+/* VOLUME BREAK badges (VOL BRK / VB 9EMA; e9.ts VB_BADGE): the accent fill */
+.e9-badge.vb { background: var(--accent); color: var(--bg); border-color: var(--accent); }

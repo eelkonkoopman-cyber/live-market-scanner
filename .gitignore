@@ -1,0 +1,32 @@
+# Go
+/scanner
+/scanner.exe
+*.exe
+*.test
+*.out
+
+# Local data / secrets
+*.db
+*.db-wal
+*.db-shm
+config.toml
+.env
+.env.*
+
+# Node / Vite (web UI)
+web/node_modules/
+web/dist/
+web/.vite/
+npm-debug.log*
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# extra
+/node_modules/
+*.lnk
+.claude/settings.local.json
+web/src/vendor/blackthorn-charts/node_modules/

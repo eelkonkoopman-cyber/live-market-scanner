@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Live Market Scanner</title>
+    <script>
+      // Paint the persisted theme before React boots, so there's no flash of
+      // the default palette on first load. A plain inline script (not a
+      // module import) so it runs synchronously ahead of main.tsx below —
+      // an ES module import would be deferred, defeating the point. The key
+      // and the allowed ids are duplicated from theme.ts's THEME_KEY/ThemeId
+      // (a real import isn't possible here); keep both in sync if either
+      // changes. try/catch: a private-mode/quota localStorage throw must
+      // not block the page from loading.
+      try {
+        var t = localStorage.getItem('mktscanner.theme.v1');
+        if (/^(warm|paper|slate|midnight|forest|plum)$/.test(t)) {
+          document.documentElement.dataset.theme = t;
+        }
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

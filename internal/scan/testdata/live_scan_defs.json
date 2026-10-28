@@ -1,0 +1,1549 @@
+[
+ {
+  "id": "mom5",
+  "name": "News Momentum Scan",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "chg1m",
+     "cmp": ">",
+     "value": 4
+    },
+    {
+     "field": "vol",
+     "cmp": ">",
+     "value": 2000
+    },
+    {
+     "field": "newsAge",
+     "cmp": "<",
+     "value": 300
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "sessVol",
+    "dir": "desc"
+   },
+   {
+    "field": "chg1m",
+    "dir": "desc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "dtrend",
+   "last",
+   "chg1m",
+   "chgDay",
+   "sessVol",
+   "vol",
+   "news"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "ping",
+   "cooldownSec": 120,
+   "requireReentry": true
+  }
+ },
+ {
+  "id": "scan-1782368272495",
+  "name": "After Hour Gainers",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "session",
+     "cmp": "==",
+     "value": "post"
+    },
+    {
+     "field": "chgDay",
+     "cmp": ">",
+     "value": 2
+    },
+    {
+     "field": "last",
+     "cmp": "<",
+     "value": 60
+    },
+    {
+     "field": "vol",
+     "cmp": ">",
+     "value": 50000
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "chgSess",
+    "dir": "desc"
+   }
+  ],
+  "limit": 25,
+  "columns": [
+   "dtrend",
+   "last",
+   "chgSess",
+   "chgDay",
+   "chg5m",
+   "vol",
+   "rvol",
+   "news"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "ping",
+   "cooldownSec": 120,
+   "requireReentry": true
+  }
+ },
+ {
+  "id": "scan-1782455326149",
+  "name": "Pre-Market Gainers",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "session",
+     "cmp": "==",
+     "value": "pre"
+    },
+    {
+     "field": "chgDay",
+     "cmp": ">",
+     "value": 5
+    },
+    {
+     "field": "vol",
+     "cmp": ">",
+     "value": 100000
+    },
+    {
+     "field": "last",
+     "cmp": "<",
+     "value": 25
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "chgDay",
+    "dir": "desc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "chgDay",
+   "vol",
+   "rvol",
+   "sessVol",
+   "chgSess",
+   "news",
+   "shortAvail"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "ping",
+   "cooldownSec": 120,
+   "requireReentry": true
+  }
+ },
+ {
+  "id": "scan-1785159608513",
+  "name": "Large Cap News Scan",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "last",
+     "cmp": ">",
+     "value": 25
+    },
+    {
+     "field": "secType",
+     "cmp": "in",
+     "value": [
+      "CS"
+     ]
+    },
+    {
+     "field": "last",
+     "cmp": "<",
+     "value": 250
+    },
+    {
+     "field": "vol",
+     "cmp": ">",
+     "value": 100000
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "sym",
+    "dir": "desc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "chgDay",
+   "vol",
+   "rvol",
+   "news",
+   "shortAvail"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "ping",
+   "cooldownSec": 120,
+   "requireReentry": true
+  }
+ },
+ {
+  "id": "scan-1785168403525",
+  "name": "Breakout Momentum",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "chg5m",
+     "cmp": ">",
+     "value": 3
+    },
+    {
+     "field": "vol",
+     "cmp": ">",
+     "value": 2000
+    },
+    {
+     "field": "last",
+     "cmp": ">",
+     "value": 0.25
+    },
+    {
+     "field": "chgDay",
+     "cmp": ">",
+     "value": 8
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "sym",
+    "dir": "desc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "chg5m",
+   "chgDay",
+   "dtrend",
+   "news",
+   "sessVol",
+   "vol",
+   "rvol",
+   "shortAvail"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "alert",
+   "cooldownSec": 120,
+   "requireReentry": true
+  }
+ },
+ {
+  "id": "scan-1785321461775",
+  "name": "News Scan Break 5min",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "chg5m",
+     "cmp": ">",
+     "value": 2
+    },
+    {
+     "field": "newsAge",
+     "cmp": "<",
+     "value": 300
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "chg5m",
+    "dir": "desc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "dtrend",
+   "last",
+   "chg5m",
+   "chgDay",
+   "vol",
+   "rvol",
+   "news"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "ping",
+   "cooldownSec": 120,
+   "requireReentry": true
+  }
+ },
+ {
+  "id": "scan-1785504595249",
+  "name": "Large Cap Momentum Scan",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "session",
+     "cmp": "==",
+     "value": "regular"
+    },
+    {
+     "field": "chg5m",
+     "cmp": ">",
+     "value": 1
+    },
+    {
+     "field": "last",
+     "cmp": ">",
+     "value": 25
+    },
+    {
+     "field": "last",
+     "cmp": "<",
+     "value": 250
+    },
+    {
+     "field": "secType",
+     "cmp": "in",
+     "value": [
+      "CS"
+     ]
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "chgDay",
+    "dir": "desc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "chg5m",
+   "chgDay",
+   "vol",
+   "rvol",
+   "news"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "bell",
+   "cooldownSec": 120,
+   "requireReentry": true
+  }
+ },
+ {
+  "id": "flags-intraday",
+  "name": "Intraday Flags",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "iflagState",
+     "cmp": ">=",
+     "value": 1
+    },
+    {
+     "field": "iflagScore",
+     "cmp": ">=",
+     "value": 60
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "iflagState",
+    "dir": "desc"
+   },
+   {
+    "field": "iflagScore",
+    "dir": "desc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "chg5m",
+   "chgDay",
+   "vol",
+   "rvol",
+   "iflagScore",
+   "iflagState",
+   "iflagRetrace",
+   "iflagVolDry",
+   "news"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "cross",
+   "trigger": {
+    "field": "iflagState",
+    "cmp": "crossAbove",
+    "value": 1.5
+   },
+   "sound": "alert",
+   "cooldownSec": 120,
+   "requireReentry": false
+  }
+ },
+ {
+  "id": "scan-1787336442850",
+  "name": "Gainers",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "chgDay",
+     "cmp": ">",
+     "value": 2
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "chgDay",
+    "dir": "desc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "chg5m",
+   "chgDay",
+   "vol",
+   "rvol",
+   "news"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "ping",
+   "cooldownSec": 120,
+   "requireReentry": true
+  }
+ },
+ {
+  "id": "scan-1790851793127",
+  "name": "Decline Momentum",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "chg5m",
+     "cmp": "<",
+     "value": -5
+    },
+    {
+     "field": "last",
+     "cmp": ">",
+     "value": 3
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "chg5m",
+    "dir": "asc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "chg5m",
+   "chgDay",
+   "vol",
+   "rvol",
+   "news"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "ping",
+   "cooldownSec": 120,
+   "requireReentry": true
+  }
+ },
+ {
+  "id": "scan-1790852551303",
+  "name": "Large Cap News Momemtum scan.",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "chg5m",
+     "cmp": ">",
+     "value": 1.5
+    },
+    {
+     "field": "newsAge",
+     "cmp": "<",
+     "value": 3600
+    },
+    {
+     "field": "last",
+     "cmp": ">",
+     "value": 25
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "chg5m",
+    "dir": "desc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "chg5m",
+   "chgDay",
+   "vol",
+   "rvol",
+   "news"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "ping",
+   "cooldownSec": 120,
+   "requireReentry": true
+  }
+ },
+ {
+  "id": "scan-1787336442850-decl",
+  "name": "Decliners",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "chgDay",
+     "cmp": "<",
+     "value": -2
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "chgDay",
+    "dir": "asc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "chg5m",
+   "chgDay",
+   "vol",
+   "rvol",
+   "news"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "ping",
+   "cooldownSec": 120,
+   "requireReentry": true
+  }
+ },
+ {
+  "id": "pmvol3x",
+  "name": "PM Volume 3x",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "session",
+     "cmp": "==",
+     "value": "pre"
+    },
+    {
+     "field": "pmVolX",
+     "cmp": ">=",
+     "value": 3
+    },
+    {
+     "field": "vol",
+     "cmp": ">",
+     "value": 100000
+    },
+    {
+     "field": "last",
+     "cmp": ">",
+     "value": 3
+    },
+    {
+     "field": "secType",
+     "cmp": "in",
+     "value": [
+      "CS"
+     ]
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "pmVolX",
+    "dir": "desc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "pmVolX",
+   "vol",
+   "adv10",
+   "chgDay",
+   "gap",
+   "news"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "ping",
+   "cooldownSec": 120,
+   "requireReentry": true
+  }
+ },
+ {
+  "id": "e9flag-slam",
+  "name": "9EMA Slam",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "pmVolX",
+     "cmp": ">=",
+     "value": 1
+    },
+    {
+     "field": "e9SlamAge",
+     "cmp": "<=",
+     "value": 300
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "e9SlamAge",
+    "dir": "asc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "chgDay",
+   "pmVolX",
+   "e9SlamPct",
+   "e9SlamAge",
+   "e9Dist",
+   "news"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "slam",
+   "cooldownSec": 300,
+   "requireReentry": false,
+   "speak": true
+  }
+ },
+ {
+  "id": "dildo-1m",
+  "name": "Green Dildo",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "dildoAge",
+     "cmp": "<=",
+     "value": 240
+    },
+    {
+     "field": "last",
+     "cmp": ">=",
+     "value": 0.2
+    },
+    {
+     "field": "dildoDvol",
+     "cmp": ">=",
+     "value": 100000
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "dildoAge",
+    "dir": "asc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "dildoBody",
+   "dildoVolX",
+   "dildoDvol",
+   "dildoAge",
+   "chgDay",
+   "vol",
+   "news"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "dildo",
+   "cooldownSec": 600,
+   "requireReentry": false,
+   "speak": true,
+   "sendToTws": true
+  }
+ },
+ {
+  "id": "dildo-pb",
+  "name": "Dildo 9EMA Pullback",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "dildoPbState",
+     "cmp": "==",
+     "value": 3
+    },
+    {
+     "field": "dildoPbAge",
+     "cmp": "<=",
+     "value": 240
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "dildoPbAge",
+    "dir": "asc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "dildoPbPx",
+   "dildoBody",
+   "dildoPbAge",
+   "chgDay",
+   "vol",
+   "news"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "long",
+   "cooldownSec": 600,
+   "requireReentry": false,
+   "speak": true
+  }
+ },
+ {
+  "id": "dildo-touch",
+  "name": "Dildo 9EMA Touch",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "dildoPbState",
+     "cmp": "==",
+     "value": 2
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "dildoTouchAge",
+    "dir": "asc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "dildoBody",
+   "dildoTouchAge",
+   "chgDay",
+   "news"
+  ],
+  "alert": {
+   "enabled": false,
+   "on": "enter",
+   "sound": "ping",
+   "cooldownSec": 600,
+   "requireReentry": false
+  }
+ },
+ {
+  "id": "climax-1m",
+  "name": "Volume Climax",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "climaxAge",
+     "cmp": "<=",
+     "value": 240
+    },
+    {
+     "field": "last",
+     "cmp": ">=",
+     "value": 0.5
+    },
+    {
+     "field": "climaxDvol",
+     "cmp": ">=",
+     "value": 50000
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "climaxAge",
+    "dir": "asc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "climaxDropPct",
+   "climaxVolX",
+   "climaxDvol",
+   "climaxLow",
+   "climaxAge",
+   "chgDay",
+   "vol",
+   "news"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "climax",
+   "cooldownSec": 600,
+   "requireReentry": false,
+   "speak": true
+  }
+ },
+ {
+  "id": "climax-confirm",
+  "name": "Bottom Confirmed",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "climaxState",
+     "cmp": "==",
+     "value": 2
+    },
+    {
+     "field": "climaxConfAge",
+     "cmp": "<=",
+     "value": 240
+    },
+    {
+     "field": "climaxAge",
+     "cmp": "<=",
+     "value": 1200
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "climaxConfAge",
+    "dir": "asc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "climaxConfPx",
+   "climaxLow",
+   "climaxDropPct",
+   "climaxVolX",
+   "climaxConfAge",
+   "chgDay",
+   "news"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "bottom",
+   "cooldownSec": 600,
+   "requireReentry": false,
+   "speak": true
+  }
+ },
+ {
+  "id": "bouncy-short",
+  "name": "Bouncy Ball Short",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "bbsAge",
+     "cmp": "<=",
+     "value": 240
+    },
+    {
+     "field": "last",
+     "cmp": ">=",
+     "value": 1
+    },
+    {
+     "field": "bbsDvol",
+     "cmp": ">=",
+     "value": 100000
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "bbsAge",
+    "dir": "asc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "bbsSupport",
+   "bbsDvol",
+   "bbsAge",
+   "chgDay",
+   "vol",
+   "news"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "bounce",
+   "cooldownSec": 600,
+   "requireReentry": false,
+   "speak": true
+  }
+ },
+ {
+  "id": "bouncy-forming",
+  "name": "Bouncy Ball Forming",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "bbsState",
+     "cmp": "==",
+     "value": 1
+    },
+    {
+     "field": "last",
+     "cmp": ">=",
+     "value": 1
+    },
+    {
+     "field": "vol",
+     "cmp": ">=",
+     "value": 200000
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "bbsDistPct",
+    "dir": "asc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "chgDay",
+   "bbsSupport",
+   "bbsDistPct",
+   "news"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "bounceSoft",
+   "cooldownSec": 900,
+   "requireReentry": false,
+   "speak": true
+  }
+ },
+ {
+  "id": "ignition",
+  "name": "Ignition",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "ignAge",
+     "cmp": "<=",
+     "value": 240
+    },
+    {
+     "field": "ignPass",
+     "cmp": "==",
+     "value": 1
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "ignAge",
+    "dir": "asc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "ignBodyPct",
+   "ignVolX",
+   "ignAge",
+   "chgDay",
+   "vol",
+   "news"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "ignite",
+   "cooldownSec": 600,
+   "requireReentry": false,
+   "speak": true
+  }
+ },
+ {
+  "id": "pm-new-high",
+  "name": "PM New High",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "session",
+     "cmp": "==",
+     "value": "pre"
+    },
+    {
+     "field": "rvol",
+     "cmp": ">=",
+     "value": 2
+    },
+    {
+     "field": "vsHod",
+     "cmp": ">=",
+     "value": 0
+    },
+    {
+     "field": "vol",
+     "cmp": ">",
+     "value": 100000
+    },
+    {
+     "field": "last",
+     "cmp": "<",
+     "value": 25
+    },
+    {
+     "field": "chgDay",
+     "cmp": ">",
+     "value": 10
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "rvol",
+    "dir": "desc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "chgDay",
+   "rvol",
+   "vol",
+   "news"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "climax",
+   "cooldownSec": 120,
+   "requireReentry": true,
+   "speak": true
+  }
+ },
+ {
+  "id": "daily-breakout",
+  "name": "Daily Breakout",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "last",
+     "cmp": ">",
+     "value": 30
+    },
+    {
+     "field": "avgVol",
+     "cmp": ">=",
+     "value": 500000
+    },
+    {
+     "field": "dbPct",
+     "cmp": ">",
+     "value": 0
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "vol",
+    "dir": "desc"
+   },
+   {
+    "field": "dbPct",
+    "dir": "asc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "dbLevel",
+   "dbType",
+   "dbPct",
+   "dbAge",
+   "chgDay",
+   "rvol",
+   "vol",
+   "news"
+  ],
+  "alert": {
+   "enabled": false,
+   "on": "enter",
+   "sound": "ping",
+   "cooldownSec": 120,
+   "requireReentry": true,
+   "speak": true
+  }
+ },
+ {
+  "id": "pdl-break",
+  "name": "PDL Break",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "last",
+     "cmp": ">",
+     "value": 25
+    },
+    {
+     "field": "avgVol",
+     "cmp": ">=",
+     "value": 500000
+    },
+    {
+     "field": "pdlPct",
+     "cmp": ">",
+     "value": 0
+    },
+    {
+     "field": "rvol",
+     "cmp": ">",
+     "value": 125000
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "pdlPct",
+    "dir": "asc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "pdlLevel",
+   "pdlPct",
+   "pdlAge",
+   "chgDay",
+   "rvol",
+   "vol",
+   "news"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "ping",
+   "cooldownSec": 30,
+   "requireReentry": true,
+   "speak": true
+  }
+ },
+ {
+  "id": "hod-flag",
+  "name": "HOD Flag",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "pmVolX",
+     "cmp": ">=",
+     "value": 1
+    },
+    {
+     "field": "e9HodFlagAge",
+     "cmp": "<=",
+     "value": 300
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "e9HodFlagAge",
+    "dir": "asc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "chgDay",
+   "pmVolX",
+   "e9HodFlagAge",
+   "e9State",
+   "e9Dist",
+   "news"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "ping",
+   "cooldownSec": 300,
+   "requireReentry": true,
+   "speak": true
+  }
+ },
+ {
+  "id": "scan-1792531698386",
+  "name": "Gap",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "chgDay",
+     "cmp": ">",
+     "value": 5
+    },
+    {
+     "field": "rvol",
+     "cmp": ">",
+     "value": 5
+    },
+    {
+     "field": "last",
+     "cmp": ">",
+     "value": 5
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "chg5m",
+    "dir": "desc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "chg5m",
+   "chgDay",
+   "vol",
+   "rvol",
+   "news"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "ping",
+   "cooldownSec": 120,
+   "requireReentry": true
+  }
+ },
+ {
+  "id": "scan-1792531785675",
+  "name": "Pivot Scan",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "last",
+     "cmp": ">",
+     "value": 5
+    },
+    {
+     "field": "rvol",
+     "cmp": ">",
+     "value": 5
+    },
+    {
+     "field": "chgDay",
+     "cmp": ">",
+     "value": 5
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "news",
+    "dir": "desc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "chg5m",
+   "chgDay",
+   "vol",
+   "rvol",
+   "news"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "ping",
+   "cooldownSec": 120,
+   "requireReentry": true
+  }
+ },
+ {
+  "id": "ep-watch",
+  "name": "EP Watch",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "session",
+     "cmp": "==",
+     "value": "pre"
+    },
+    {
+     "field": "epPass",
+     "cmp": "==",
+     "value": 1
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "epGap",
+    "dir": "desc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "epGap",
+   "epVolX",
+   "epEarnHL",
+   "epEarnAge",
+   "ep3m",
+   "epAdr",
+   "epStop",
+   "news"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "ping",
+   "cooldownSec": 600,
+   "requireReentry": true,
+   "speak": true
+  }
+ },
+ {
+  "id": "ep-break",
+  "name": "EP Break",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "epBrkAge",
+     "cmp": ">=",
+     "value": 0
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "epBrkAge",
+    "dir": "asc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "epOrh",
+   "epStop",
+   "epRiskPct",
+   "epGap",
+   "epVolX",
+   "epEarnHL",
+   "epAdr",
+   "epBrkAge",
+   "news"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "ping",
+   "cooldownSec": 86400,
+   "requireReentry": false,
+   "speak": true
+  }
+ },
+ {
+  "id": "power-candle",
+  "name": "Power Candle",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "pcAge",
+     "cmp": "<=",
+     "value": 240
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "pcAge",
+    "dir": "asc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "pcBodyPct",
+   "pcTopPct",
+   "pcBodyX",
+   "pcVolX",
+   "pcDvol",
+   "pcAge",
+   "chgDay",
+   "vol",
+   "news"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "bell",
+   "cooldownSec": 600,
+   "requireReentry": false,
+   "speak": true
+  }
+ },
+ {
+  "id": "scan-1792745058312",
+  "name": "Large Cap Gainers",
+  "enabled": true,
+  "filter": {
+   "op": "and",
+   "conds": [
+    {
+     "field": "chgDay",
+     "cmp": ">",
+     "value": 2
+    },
+    {
+     "field": "last",
+     "cmp": ">",
+     "value": 25
+    }
+   ]
+  },
+  "sort": [
+   {
+    "field": "chgDay",
+    "dir": "desc"
+   }
+  ],
+  "limit": 50,
+  "columns": [
+   "last",
+   "chg5m",
+   "chgDay",
+   "vol",
+   "rvol",
+   "news"
+  ],
+  "alert": {
+   "enabled": true,
+   "on": "enter",
+   "sound": "ping",
+   "cooldownSec": 120,
+   "requireReentry": true
+  }
+ }
+]
