@@ -63,6 +63,9 @@ func (t *Ticket) ownerLocked(id int64) *ord {
 	if o := t.byChild[id]; o != nil {
 		return o
 	}
+	if o := t.bySL[id]; o != nil {
+		return o
+	}
 	return t.byExit[id]
 }
 
@@ -92,6 +95,13 @@ func (t *Ticket) foreignStatusLocked(m statusMsg) string {
 		}
 		if m.ParentID != 0 && m.ParentID != o.ID {
 			return fmt.Sprintf("TP reported with parent %d, ours %d", m.ParentID, o.ID)
+		}
+	} else if o := t.bySL[m.ID]; o != nil {
+		if o.SLPermID != 0 {
+			wantPerm = o.SLPermID
+		}
+		if m.ParentID != 0 && m.ParentID != o.ID {
+			return fmt.Sprintf("stop reported with parent %d, ours %d", m.ParentID, o.ID)
 		}
 	}
 	if wantPerm != 0 && m.PermID != 0 && m.PermID != wantPerm {

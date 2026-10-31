@@ -32,7 +32,8 @@ func TestManualBELong(t *testing.T) {
 	if err := r.tk.MoveStopToEntry(pid); err == nil || !strings.Contains(err.Error(), "already at or past entry") {
 		t.Fatalf("%v", err)
 	}
-	if len(r.f.placesCopy()) != 2 || len(cancels(r)) != 0 {
+	// parent + TP + the TP re-sent at the fill average on the first fill (tpverify.go)
+	if len(r.f.placesCopy()) != 3 || len(cancels(r)) != 0 {
 		t.Fatal("manual breakeven sent orders")
 	}
 }

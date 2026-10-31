@@ -16,6 +16,11 @@ package orderticket
 //	        exits through the soft-stop machinery (cancel TP, confirmed-fill
 //	        sizing, outsideRth LMT exit with re-price steps, never oversells)
 //
+// "News Flag" preset (Settings.Preset == "newsflag"), for a 9EMA flag on a
+// stock with a news catalyst (the trader picks the stock; nothing here checks
+// for news): entry, stop and risk as Custom, breakeven off, and the exit is the
+// 5m trail. The TP is a far +/-nfTPPct runner limit, so the usual bracket stays.
+//
 // The 5m trail and the entry timeout are per-order flags available in Custom
 // too (Settings.Trail5m, Settings.EntryTimeoutMin). Risk sizing uses the
 // preset's 6% planned stop. All per-order fields are audited with the place
@@ -31,11 +36,13 @@ import (
 const (
 	presetCustom = "custom"
 	presetPower  = "power"
+	presetNews   = "newsflag"
 
 	psStopPct     = 6.0
 	psTPR         = 3.0
 	psBEPct       = 7.5
 	psTimeoutMin  = 15
+	nfTPPct       = 50.0
 	fiveMin       = int64(5 * 60 * 1000)
 	maxTimeoutMin = 240
 )
@@ -80,6 +87,11 @@ func (t *Ticket) applyPresetLocked(p *Pending, ema float64) {
 		p.TP = tpForR(p.Side, p.Limit, stopLevelFor(p.Side, ema, p.Limit, psStopPct), psTPR)
 		return
 	}
+	if t.settings.Preset == presetNews {
+		p.Preset, p.Trail5m, p.EntryTimeoutMin, p.TPPct = presetNews, true, t.settings.EntryTimeoutMin, nfTPPct
+		p.TP = tpPrice(p.Side, p.Limit, nfTPPct)
+		return
+	}
 	p.Preset, p.Trail5m, p.EntryTimeoutMin = presetCustom, t.settings.Trail5m, t.settings.EntryTimeoutMin
 }
 
@@ -93,10 +105,16 @@ func (t *Ticket) presetToOrderLocked(o *ord, p *Pending, now time.Time) {
 		o.StopFollow = false
 		o.BEOff, o.BEPct, o.BEOffsetPct = false, psBEPct, 0
 	}
+	if p.Preset == presetNews {
+		o.BEOff = true
+	}
 }
 
 // presetLabel: "PS · SL x · TP 3R y · 5m trail" for the order row.
 func presetLabel(o *ord) string {
+	if o.Kind == kindVwapx {
+		return "VWAP X " + etHHMM(o.CrossMs)
+	}
 	s := ""
 	if o.Preset == presetPower {
 		s = "PS"
@@ -104,6 +122,9 @@ func presetLabel(o *ord) string {
 			s += " · SL " + fmtPx(o.StopLevel)
 		}
 		s += fmt.Sprintf(" · TP %sR %s", trimFloat(o.TPR), fmtPx(o.TP))
+	}
+	if o.Preset == presetNews {
+		s = "News Flag"
 	}
 	if o.Trail5m {
 		if s != "" {
@@ -206,7 +227,7 @@ func (t *Ticket) trailCheckLocked(o *ord, last float64, now time.Time) []func() 
 // SetPreset selects the preset for the next orders and the Custom 5m-trail /
 // entry-timeout defaults (timeout minutes 0 = off).
 func (t *Ticket) SetPreset(ctx context.Context, name string, trail5m bool, timeoutMin int) error {
-	if name != presetCustom && name != presetPower {
+	if name != presetCustom && name != presetPower && name != presetNews {
 		return fmt.Errorf("unknown preset %q", name)
 	}
 	if timeoutMin < 0 || timeoutMin > maxTimeoutMin {

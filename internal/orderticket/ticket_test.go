@@ -155,6 +155,10 @@ type rig struct {
 	now  time.Time
 	aud  *MemAudit
 	meta map[string]string
+	// cross: sym -> the newest VWAP bull cross candle's start ms (vwapx_test.go)
+	cross map[string]int64
+	// crossBear: the same for the bear cross (vwapx_bear_test.go)
+	crossBear map[string]int64
 }
 
 // 10:30:30 ET on a weekday.
@@ -170,7 +174,19 @@ func newRig(t *testing.T, aud *MemAudit) *rig {
 	tk, err := New(Config{
 		Audit:         aud,
 		WhatIfTimeout: 300 * time.Millisecond,
-		Now:           func() time.Time { r.mu.Lock(); defer r.mu.Unlock(); return r.now },
+		LatestVwapBull: func(sym string) (int64, bool) {
+			r.mu.Lock()
+			defer r.mu.Unlock()
+			ms, ok := r.cross[sym]
+			return ms, ok
+		},
+		LatestVwapBear: func(sym string) (int64, bool) {
+			r.mu.Lock()
+			defer r.mu.Unlock()
+			ms, ok := r.crossBear[sym]
+			return ms, ok
+		},
+		Now: func() time.Time { r.mu.Lock(); defer r.mu.Unlock(); return r.now },
 		Factory: func(w Wrapper) EClient {
 			r.f.w = w
 			return r.f

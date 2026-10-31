@@ -13,7 +13,8 @@
         "SCANNER_LISTEN": "127.0.0.1:7900",
         "SCANNER_DB": "C:\\Users\\koopm\\AppData\\Local\\Temp\\scanner_chart.db",
         "SCANNER_NO_TRAY": "1",
-        "SCANNER_LOG_FILE": "C:/Users/koopm/AppData/Local/Temp/scanner_preview.log"
+        "SCANNER_LOG_FILE": "C:/Users/koopm/AppData/Local/Temp/scanner_preview.log",
+        "SCANNER_NEWSFILTER": "0"
       }
     },
     {
@@ -28,7 +29,8 @@
         "SCANNER_LISTEN": "127.0.0.1:7901",
         "SCANNER_DB": "C:/Users/koopm/AppData/Local/Temp/scanner_chart_alt.db",
         "SCANNER_NO_TRAY": "1",
-        "SCANNER_LOG_FILE": "C:/Users/koopm/AppData/Local/Temp/scanner_preview_alt.log"
+        "SCANNER_LOG_FILE": "C:/Users/koopm/AppData/Local/Temp/scanner_preview_alt.log",
+        "SCANNER_NEWSFILTER": "0"
       }
     },
     {

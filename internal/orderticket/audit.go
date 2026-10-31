@@ -13,8 +13,10 @@ import (
 // The set of ids in it is the ticket's ownership record: only these orders are
 // ever adopted, modified or cancelled.
 type auditRec struct {
-	T        int64   `json:"t"`
-	Ev       string  `json:"ev"` // place | perm | modify | cancel
+	T  int64  `json:"t"`
+	Ev string `json:"ev"` // place | perm | modify | cancel
+	// Kind "vwapx" = entry + TP + real IB stop children (vwapx.go)
+	Kind     string  `json:"kind,omitempty"`
 	ID       int64   `json:"id"`
 	ParentID int64   `json:"parentId,omitempty"`
 	PermID   int64   `json:"permId,omitempty"`

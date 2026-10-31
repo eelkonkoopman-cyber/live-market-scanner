@@ -7,6 +7,7 @@ import { applyFollow, subscribeFollowAlerts, type FollowKind } from '../signalFo
 import { SignalCell } from '../components/SignalCell';
 import { SignalPanel } from '../components/SignalPanel';
 import { WatchlistSidebar } from '../components/WatchlistSidebar';
+import { Splitter } from '../components/Resize';
 import { FlagScanList } from '../components/FlagScanList';
 import { FlagEventList } from '../components/FlagEventList';
 import { SignalSwitchMenu } from '../components/SignalSwitchMenu';
@@ -206,7 +207,35 @@ const PRESET_GROUPS = [
   { title: 'stacked layouts for a portrait window', items: SIGNAL_PORTRAIT_PRESETS },
 ] as const;
 
+// Signals column sizes, dragged by the user (2026-10-29: "Yes draggable"):
+// the column's width beside the charts and the flag scan's height above the
+// Signals list. localStorage, like this window's layout; clamped on load.
+const SPLIT_KEY = 'mktscanner.signal.split.v1';
+const HIST_W = { def: 380, min: 260, max: 900 };
+const FLAG_H = { def: 200, min: 70, max: 900 };
+type Dock = 'left' | 'right';
+function loadSplit(): { histW: number; flagH: number; dock: Dock } {
+  const clamp = (v: unknown, r: { def: number; min: number; max: number }) =>
+    typeof v === 'number' && Number.isFinite(v) ? Math.min(r.max, Math.max(r.min, Math.round(v))) : r.def;
+  try {
+    const o = JSON.parse(localStorage.getItem(SPLIT_KEY) ?? '{}') as { histW?: unknown; flagH?: unknown; dock?: unknown };
+    return { histW: clamp(o.histW, HIST_W), flagH: clamp(o.flagH, FLAG_H), dock: o.dock === 'left' ? 'left' : 'right' };
+  } catch {
+    return { histW: HIST_W.def, flagH: FLAG_H.def, dock: 'right' };
+  }
+}
+
 export function SignalPane({ sym: urlSym }: { sym: string }) {
+  const [split, setSplit] = useState(loadSplit);
+  const splitRef = useRef(split);
+  splitRef.current = split;
+  const saveSplit = () => {
+    try {
+      localStorage.setItem(SPLIT_KEY, JSON.stringify(splitRef.current));
+    } catch {
+      /* private mode / quota: the drag still works for this session */
+    }
+  };
   const feed = useStore((s) => s.feed);
   const chartSym = useStore((s) => s.chartSym);
   // The per-symbol bars / prior close / chart error are read by each
@@ -892,21 +921,46 @@ export function SignalPane({ sym: urlSym }: { sym: string }) {
         </button>
       </div>
       <div className="signal-body">
+        {/* Flag scan + Signals live under the watchlist again (user,
+            2026-10-30: "The right column back to where it was. Under the
+            watchlist"). The sidebar's width and the flag/Signals split are
+            both dragged and remembered (mktscanner.signal.split.v1). */}
         {showWl && (
-          <WatchlistSidebar boxes={false}>
-            <div className="flag-stack">
-              <FlagScanList
-                scanId={flagScanId}
-                onScanId={setFlagScanId}
-                onChart={onChartSet}
-                onPick={pickFlagSym}
-                signalOn={isSignalSwitchId(flagScanId) ? switches[flagScanId] : undefined}
-                onToggleSignal={isSignalSwitchId(flagScanId) ? () => toggleSwitch(flagScanId) : undefined}
-              />
-              <FlagEventList onChart={onChartSet} onPick={pickFlagSym} />
-            </div>
-          </WatchlistSidebar>
+          <>
+            <WatchlistSidebar boxes={false} style={{ flexBasis: split.histW }}>
+              <div className="flag-stack">
+                <div className="signal-flagbox" style={{ flexBasis: split.flagH }}>
+                  <FlagScanList
+                    scanId={flagScanId}
+                    onScanId={setFlagScanId}
+                    onChart={onChartSet}
+                    onPick={pickFlagSym}
+                    signalOn={isSignalSwitchId(flagScanId) ? switches[flagScanId] : undefined}
+                    onToggleSignal={isSignalSwitchId(flagScanId) ? () => toggleSwitch(flagScanId) : undefined}
+                  />
+                </div>
+                <Splitter
+                  axis="y"
+                  value={split.flagH}
+                  min={FLAG_H.min}
+                  max={FLAG_H.max}
+                  onChange={(v) => setSplit((p) => ({ ...p, flagH: v }))}
+                  onCommit={saveSplit}
+                />
+                <FlagEventList onChart={onChartSet} onPick={pickFlagSym} />
+              </div>
+            </WatchlistSidebar>
+            <Splitter
+              axis="x"
+              value={split.histW}
+              min={HIST_W.min}
+              max={HIST_W.max}
+              onChange={(v) => setSplit((p) => ({ ...p, histW: v }))}
+              onCommit={saveSplit}
+            />
+          </>
         )}
+        <div className="signal-main">
         <div
           className="signal-grid"
           style={{
@@ -931,6 +985,7 @@ export function SignalPane({ sym: urlSym }: { sym: string }) {
               onResult={(r) => handleCellResult(idx, def.sym, def.tf === '5m' ? 5 : 1, r)}
             />
           ))}
+        </div>
         </div>
         <button
           type="button"

@@ -51,8 +51,15 @@ func ibOrder(o *Order) *ibapi.Order {
 	io.OrderType = o.OrderType
 	io.TotalQuantity = ibapi.StringToDecimal(strconv.FormatFloat(float64(o.TotalQuantity), 'f', -1, 64))
 	io.LmtPrice = o.LmtPrice
+	if o.OrderType == "STP" { // a stop order has no limit price: ibapi leaves it unset
+		io.LmtPrice = ibapi.UNSET_FLOAT
+	}
+	if o.AuxPrice > 0 {
+		io.AuxPrice = o.AuxPrice
+	}
 	io.TIF = o.TIF
 	io.OCAGroup = o.OcaGroup
+	io.OCAType = o.OcaType
 	io.Account = o.Account
 	io.OrderRef = o.OrderRef
 	io.Transmit = o.Transmit
@@ -99,6 +106,26 @@ func TestPlaceOrderMatchesIbapi(t *testing.T) {
 			id := int64(100 + i)
 			ib := ibCapture(t, sv, func(c *ibapi.EClient) { c.PlaceOrder(id, ibContract(ct), ibOrder(o)) })
 			assertSame(t, "placeOrder@"+strconv.Itoa(sv)+"#"+strconv.Itoa(i), encPlaceOrder(sv, id, ct, o), ib)
+		}
+	}
+}
+
+// The VWAP X bracket: the STP child (auxPrice = trigger, no limit, OCA group +
+// type 1, parent id, last child so Transmit=true) and the OCA'd TP child must be
+// byte-identical to ibapi's at every server version the client can negotiate.
+func TestVwapxBracketMatchesIbapi(t *testing.T) {
+	ct := contractFor("MGM")
+	tk := &Ticket{account: "U1234567"}
+	o := &ord{ID: 100, ChildID: 101, SLID: 102, Kind: kindVwapx, Sym: "MGM", Side: "BUY", Qty: 120, Limit: 27.99, TP: 28.27, SLPx: 27.80}
+	orders := []*Order{tk.entryOrder(o, false), tk.vwapxTP(o, false), tk.slOrder(o, true)}
+	if sl := orders[2]; sl.OrderType != "STP" || sl.AuxPrice != 27.80 || sl.OcaGroup != "vwapx-100" || sl.OcaType != 1 || sl.ParentID != 100 {
+		t.Fatalf("stop child %+v", sl)
+	}
+	for _, sv := range []int{100, 141, 145, 158, 165, 166, 169, 175, 176} {
+		for i, x := range orders {
+			id := int64(100 + i)
+			ib := ibCapture(t, sv, func(c *ibapi.EClient) { c.PlaceOrder(id, ibContract(ct), ibOrder(x)) })
+			assertSame(t, "vwapx@"+strconv.Itoa(sv)+"#"+strconv.Itoa(i), encPlaceOrder(sv, id, ct, x), ib)
 		}
 	}
 }
@@ -347,6 +374,12 @@ func TestMktDataRequestsMatchIbapi(t *testing.T) {
 			assertSame(t, "reqMktData"+s, encReqMktData(sv, mdReqBase+1, ct, "236"),
 				ibCapture(t, sv, func(c *ibapi.EClient) { c.ReqMktData(mdReqBase+1, ibContract(ct), "236", false, false, nil) }))
 		}
+		// the soft stop's price line: no generic ticks (stopsrc.go)
+		sct := contractFor("ONCO")
+		assertSame(t, "reqMktData(stop)@"+strconv.Itoa(sv), encReqMktData(sv, stopMDBase+1, sct, ""),
+			ibCapture(t, sv, func(c *ibapi.EClient) { c.ReqMktData(stopMDBase+1, ibContract(sct), "", false, false, nil) }))
+		assertSame(t, "cancelMktData(stop)@"+strconv.Itoa(sv), encCancelMktData(stopMDBase+1),
+			ibCapture(t, sv, func(c *ibapi.EClient) { c.CancelMktData(stopMDBase + 1) }))
 		assertSame(t, "cancelMktData@"+strconv.Itoa(sv), encCancelMktData(mdReqBase+1),
 			ibCapture(t, sv, func(c *ibapi.EClient) { c.CancelMktData(mdReqBase + 1) }))
 	}

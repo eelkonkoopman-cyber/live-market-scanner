@@ -275,6 +275,24 @@ func b2s(b bool) string {
 // round-trip decimal, no forced ".0": 2 -> "2", 1.53 -> "1.53").
 func fnum(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) }
 
+// lmtField: sendMax(lmtPrice). A STP order has no limit price: ibapi leaves
+// it at UNSET_DOUBLE, which sendMax writes as an empty field.
+func lmtField(o *Order) string {
+	if o.OrderType == "STP" {
+		return ""
+	}
+	return fnum(o.LmtPrice)
+}
+
+// auxField: sendMax(auxPrice) - the stop trigger price of a STP order; every
+// other order the ticket sends leaves it unset (empty).
+func auxField(o *Order) string {
+	if o.AuxPrice > 0 {
+		return fnum(o.AuxPrice)
+	}
+	return ""
+}
+
 func qnum(q Qty) string { return strconv.FormatFloat(float64(q), 'f', -1, 64) }
 
 // Unset values as ibapi v0.10.37 writes them where it does NOT use sendMax
@@ -365,8 +383,8 @@ func encPlaceOrder(sv int, id int64, ct *Contract, o *Order) []string {
 		o.Action,
 		qnum(o.TotalQuantity),
 		o.OrderType,
-		fnum(o.LmtPrice), // sendMax(lmtPrice)
-		"",               // auxPrice (unset)
+		lmtField(o), // sendMax(lmtPrice); unset for STP
+		auxField(o), // sendMax(auxPrice): the STP trigger; unset otherwise
 		// extended order fields
 		o.TIF,
 		o.OcaGroup,
@@ -400,52 +418,52 @@ func encPlaceOrder(sv int, id int64, ct *Contract, o *Order) []string {
 		)
 	}
 	f = append(f,
-		"0",           // shortSaleSlot
-		"",            // designatedLocation
-		"-1",          // exemptCode
-		"0",           // ocaType
-		"",            // rule80A
-		"",            // settlingFirm
-		"0",           // allOrNone
-		"",            // minQty
-		"",            // percentOffset
-		"0",           // eTradeOnly
-		"0",           // firmQuoteOnly
-		"",            // nbboPriceCap
-		"0",           // auctionStrategy (AUCTION_UNSET)
-		"",            // startingPrice
-		"",            // stockRefPrice
-		"",            // delta
-		"",            // stockRangeLower
-		"",            // stockRangeUpper
-		"0",           // overridePercentageConstraints
-		"",            // volatility
-		"",            // volatilityType
-		"",            // deltaNeutralOrderType (empty: no delta-neutral sub-fields)
-		"",            // deltaNeutralAuxPrice
-		"0",           // continuousUpdate
-		"",            // referencePriceType
-		"",            // trailStopPrice
-		"",            // trailingPercent
-		"",            // scaleInitLevelSize
-		"",            // scaleSubsLevelSize
-		"",            // scalePriceIncrement (unset: no scale sub-fields)
-		"",            // scaleTable
-		"",            // activeStartTime
-		"",            // activeStopTime
-		"",            // hedgeType (empty: no hedgeParam)
-		"0",           // optOutSmartRouting
-		"",            // clearingAccount
-		"",            // clearingIntent
-		"0",           // notHeld
-		"0",           // deltaNeutralContract present = false
-		"",            // algoStrategy (empty: no algo params)
-		"",            // algoId
-		b2s(o.WhatIf), // whatIf (true only for the ticket's margin check)
-		"",            // orderMiscOptions
-		"0",           // solicited
-		"0",           // randomizeSize
-		"0",           // randomizePrice
+		"0",            // shortSaleSlot
+		"",             // designatedLocation
+		"-1",           // exemptCode
+		i64(o.OcaType), // ocaType (0 unless the ticket sets an OCA group)
+		"",             // rule80A
+		"",             // settlingFirm
+		"0",            // allOrNone
+		"",             // minQty
+		"",             // percentOffset
+		"0",            // eTradeOnly
+		"0",            // firmQuoteOnly
+		"",             // nbboPriceCap
+		"0",            // auctionStrategy (AUCTION_UNSET)
+		"",             // startingPrice
+		"",             // stockRefPrice
+		"",             // delta
+		"",             // stockRangeLower
+		"",             // stockRangeUpper
+		"0",            // overridePercentageConstraints
+		"",             // volatility
+		"",             // volatilityType
+		"",             // deltaNeutralOrderType (empty: no delta-neutral sub-fields)
+		"",             // deltaNeutralAuxPrice
+		"0",            // continuousUpdate
+		"",             // referencePriceType
+		"",             // trailStopPrice
+		"",             // trailingPercent
+		"",             // scaleInitLevelSize
+		"",             // scaleSubsLevelSize
+		"",             // scalePriceIncrement (unset: no scale sub-fields)
+		"",             // scaleTable
+		"",             // activeStartTime
+		"",             // activeStopTime
+		"",             // hedgeType (empty: no hedgeParam)
+		"0",            // optOutSmartRouting
+		"",             // clearingAccount
+		"",             // clearingIntent
+		"0",            // notHeld
+		"0",            // deltaNeutralContract present = false
+		"",             // algoStrategy (empty: no algo params)
+		"",             // algoId
+		b2s(o.WhatIf),  // whatIf (true only for the ticket's margin check)
+		"",             // orderMiscOptions
+		"0",            // solicited
+		"0",            // randomizeSize
+		"0",            // randomizePrice
 	)
 	if sv >= svPeggedToBenchmark {
 		f = append(f,

@@ -297,6 +297,24 @@ flat files  ─► RVOL baseline backfill                        (defs, rvol, fl
   Scores persist to the archive (`news_articles.impact_score/impact_tier/
   event_type/impact_direction`) so they survive restarts and show up in a
   symbol's history too, not just the live feed.
+- **Newsfilter recorder (optional, record-only, off by default)**: newsfilter.io
+  ($65/month) is being evaluated as a cheaper stand-in for RTPR ($139).
+  `internal/newsfilter` connects to its websocket and only RECORDS when each
+  article arrives (one JSONL line per article in a UTC day file under
+  `~/.marketscanner/newsrace/`); nothing reaches the news panel, alerts, the
+  autosummarizer, health, the WS hub or the database, and RTPR is untouched.
+  Token via `SCANNER_NEWSFILTER_TOKEN` or a one-line
+  `~/.marketscanner/newsfiltertoken` file; without one the package never
+  starts. `SCANNER_NEWSFILTER=0` is an explicit off switch that beats the
+  token (the preview configs in `.claude/launch.json` set it, so a preview
+  never opens a second stream on the key). Compare the two feeds with
+  `go run ./cmd/newsrace` (`-days 30`, `-maxpx 20`; read-only on the
+  database, never touches `scanner.exe`): it pairs the same release on both
+  sides and prints coverage both ways per wire plus the delivery lead
+  (p10/p50/p90, overall and for stocks at or under `-maxpx`), and gives a
+  verdict only after 200 matched pairs. The protocol was built from their
+  docs alone, so the first run also keeps its first 200 frames verbatim in
+  `raw-frames.jsonl` next to the day files.
 - **SEC EDGAR 13G/13G-A watcher (always on, no token)**: ownership-stake
   disclosures (an investor crossing 5% of a company) are filed by the
   ACQUIRING investor, not the company, so they frequently have zero

@@ -72,6 +72,11 @@ func (t *Ticket) CancelSymbol(sym string) (string, error) {
 		id := o.ID
 		r := auditRec{Ev: "cancel", ID: id, Sym: o.Sym, Note: "CANCEL button"}
 		acts = append(acts, func() { t.record(r); c.CancelOrder(id) })
+		if o.Filled == 0 && o.slActive() { // VWAP X: IB cancels its children with the parent; say so explicitly
+			sid := o.SLID
+			r3 := auditRec{Ev: "cancel", ID: sid, Sym: o.Sym, Note: "CANCEL button (IB stop of unfilled entry)"}
+			acts = append(acts, func() { t.record(r3); c.CancelOrder(sid) })
+		}
 		if o.Filled == 0 && o.childActive() {
 			cid := o.ChildID
 			r2 := auditRec{Ev: "cancel", ID: cid, Sym: o.Sym, Note: "CANCEL button (TP of unfilled entry)"}

@@ -17,6 +17,9 @@ import (
 
 // manualBEOK: the order holds shares and its stop has not fired.
 func (o *ord) manualBEOK() bool {
+	if o.Kind == kindVwapx { // its stop is a real IB order: not moved by the ticket
+		return false
+	}
 	if o.held() <= 0 || !(o.Avg > 0) {
 		return false
 	}
@@ -58,7 +61,7 @@ func (t *Ticket) manualBELocked(o *ord) (string, []func(), error) {
 		if o.BEPct <= 0 {
 			o.BEOff, o.BEPct, o.BEOffsetPct = t.settings.BEOff, t.settings.BEPct, t.settings.BEOffsetPct
 		}
-		o.StopOff, o.StopState, o.stopHits = false, stArmed, 0
+		o.StopOff, o.StopState, o.stopDeb = false, stArmed, [nPxSrc]stopDeb{}
 		o.stopBar = t.quoteLocked(o.Sym, t.now()).LastClosed
 	}
 	o.StopLevel, o.BE = lv, true

@@ -117,6 +117,7 @@ func (c *Client) Stream(ctx context.Context, out chan<- core.Agg, onReset func()
 			}
 			continue
 		}
+		began := time.Now()
 		err := c.streamOnce(ctx, out, onReset)
 		if err == nil {
 			return nil // ctx done
@@ -124,8 +125,20 @@ func (c *Client) Stream(ctx context.Context, out chan<- core.Agg, onReset func()
 		// Retry ALL errors (including auth) with backoff, so changing the key at
 		// runtime recovers without a restart. A persistently bad key just retries
 		// every ~30s (logged), not hammered.
+		//
+		// A connection that ran healthily resets the backoff: before 2026-10-29
+		// it never reset, so after five drops every reconnect slept 32 s - the
+		// whole market (and the order ticket's soft stop) went blind for ~35 s
+		// at each of the ~5.5-minute drops seen all day.
+		up := time.Since(began)
+		if up >= backoffResetAfter {
+			backoff = time.Second
+		}
 		if errors.Is(err, errFatal) {
 			logx.L().Warn("feed auth/subscribe rejected; will retry", "err", err)
+		} else {
+			logx.L().Warn("market stream dropped; reconnecting", "err", err,
+				"up", up.Round(time.Second).String(), "in", backoff.String())
 		}
 		select {
 		case <-ctx.Done():
@@ -137,6 +150,10 @@ func (c *Client) Stream(ctx context.Context, out chan<- core.Agg, onReset func()
 		}
 	}
 }
+
+// backoffResetAfter: a connection that lived this long was healthy; the
+// next reconnect starts again from a 1 s backoff.
+var backoffResetAfter = 30 * time.Second // var: shortened in tests
 
 func (c *Client) streamOnce(ctx context.Context, out chan<- core.Agg, onReset func()) error {
 	dialCtx, cancel := context.WithTimeout(ctx, 15*time.Second)

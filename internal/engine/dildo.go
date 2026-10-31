@@ -82,11 +82,13 @@ const signalHitsBuffer = 512
 // a ticker the engine built with neither on - and every hand-built test
 // ticker - pays one nil check per print and per tick).
 type signals struct {
+	secTypes atomic.Pointer[map[string]string] // for the VWAP cross quality gate
 	dildo  bool               // SCANNER_DILDO: classify green dildos (alert 1) and hand them on
 	climax bool               // SCANNER_CLIMAX: classify climaxes and step their confirmation latch
 	bbs    bool               // SCANNER_BBS: the bouncy ball short judge (bbs.go)
 	ign    bool               // SCANNER_IGNITION: the ignition judge (ignition.go)
 	emv    bool               // SCANNER_EMAVWAP: the 9EMA VWAP cross judge (emavwap.go)
+	emvOff bool               // the judge's INTRABAR (live) fire off: closed-bar judging only (tests of the closed-bar path)
 	vb     bool               // SCANNER_VOLBREAK: the volume break judge (volbreak.go)
 	hits   chan core.DildoHit // the flagscan hand-off; nil when dildo is off
 	drops  atomic.Int64       // hits dropped because the channel was full
@@ -94,6 +96,11 @@ type signals struct {
 
 	events  chan core.SignalHit // the signal history hand-off (Options.SignalLog); nil = off
 	evDrops atomic.Int64        // alerts dropped because events was full
+
+	// emvBlocked counts, per universe leg (emvLegDv, emvLegRvol, emvLegOther;
+	// index leg-1), the intrabar 9EMA VWAP crosses that were geometrically valid
+	// but blocked by the universe - once per symbol-minute (emavwap.go).
+	emvBlocked [emvLegsCount]atomic.Int64
 
 	// streamMs is the wall clock (ms) of the latest Engine.Seed: ingest re-seeds
 	// every ticker right before its stream starts and on every reconnect, and
@@ -108,8 +115,11 @@ type signals struct {
 // non-blocking send; a full channel drops it and counts the drop. No-op when
 // the hand-off is off. Called once per alert (a bar is judged once), never per
 // print: it allocates nothing.
+// sigMinPrice: no signal for a stock under this (user, 2026-10-31).
+var sigMinPrice = 0.50
+
 func (sg *signals) emit(h core.SignalHit) {
-	if sg.events == nil {
+	if sg.events == nil || (h.Price > 0 && h.Price < sigMinPrice) {
 		return
 	}
 	select {
@@ -263,6 +273,9 @@ func (t *tickerState) accumDildo(a core.Agg) {
 		return // its bar was judged already: a late print
 	case m == d.bar[1].m:
 		d.bar[1].merge(ts, o, h, l, c, v)
+		if sg.emv {
+			t.intrabarEmv(&d.bar[1], a.EndMs, sg.etOff.Load()) // live cross (emavwap.go)
+		}
 	case m == d.bar[0].m:
 		d.bar[0].merge(ts, o, h, l, c, v)
 	case m > d.bar[1].m:
@@ -271,6 +284,9 @@ func (t *tickerState) accumDildo(a core.Agg) {
 		}
 		d.bar[0] = d.bar[1]
 		d.bar[1] = d1Slot{m: m, o: o, h: h, l: l, c: c, oTs: ts, cTs: ts, v: v, hodBefore: d.preHod}
+		if sg.emv {
+			t.intrabarEmv(&d.bar[1], a.EndMs, sg.etOff.Load())
+		}
 	default:
 		// Older than the newest slot and not the previous one: a first print for
 		// a minute the slots have already moved past. Dropped.

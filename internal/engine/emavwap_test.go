@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"time"
 	"math"
 	"testing"
 
@@ -11,7 +12,7 @@ var emvTestVol int64 = 60000
 
 func newEmvTS() (*tickerState, *signals) {
 	ts, sg := newSigTS(false, false)
-	sg.emv = true
+	sg.emv, sg.emvOff = true, true // closed-bar tests: no live fire (see newEmvLiveTS)
 	sg.events = make(chan core.SignalHit, 64)
 	// inside the history universe: avg volume 5M, RVOL baseline 1000 shares
 	ts.ref.ok, ts.ref.v = true, refVals{avgVol: 5e6, avgVolOK: true, rvolBase: 1000, rvolOK: true}
@@ -413,5 +414,37 @@ func TestEmvWaitingCrossDroppedWhenItFallsBack(t *testing.T) {
 		if h.Kind == core.KindEmaVwapBull {
 			t.Fatal("fired a bull after falling back")
 		}
+	}
+}
+
+// TestEmvStampsTheActualCrossBar: a cross that lands inside the 0.05% band
+// fires on the bar that leaves it, but the signal is stamped with the bar where
+// the EMA actually crossed the VWAP (user, 2026-10-29: "KLAC. 12:59 signal.
+// Cross at 12:58"). A cross beyond the band on its own bar is stamped there.
+func TestEmvStampsTheActualCrossBar(t *testing.T) {
+	ts, sg := newEmvTS()
+	next := warmEmv(ts, etMs(12, 40), 100, 100.1) // EMA 100 under the VWAP
+	for next < etMs(12, 58) {
+		feedM(ts, next, 100, 100.1)
+		next += m1Ms
+	}
+	drainSignals(sg)
+	feedM(ts, etMs(12, 58), 100, 99.99) // 12:58: crossed, d = +0.01 % (inside the band)
+	if hs := drainSignals(sg); len(hs) != 0 {
+		t.Fatalf("fired inside the band: %+v", hs)
+	}
+	feedM(ts, etMs(12, 59), 100, 99.9) // 12:59: d = +0.1 %, leaves the band -> fires
+	hs := drainSignals(sg)
+	if len(hs) != 1 {
+		t.Fatalf("expected one bull, got %d", len(hs))
+	}
+	if hs[0].BarMs != etMs(12, 58) {
+		t.Fatalf("stamped %s, want the 12:58 cross bar", time.UnixMilli(hs[0].BarMs).In(nyLoc).Format("15:04"))
+	}
+	// the opposite cross beyond the band on its own bar is stamped on that bar
+	feedM(ts, etMs(13, 0), 100, 100.2)
+	hs = drainSignals(sg)
+	if len(hs) != 1 || hs[0].BarMs != etMs(13, 0) {
+		t.Fatalf("bear: %+v", hs)
 	}
 }

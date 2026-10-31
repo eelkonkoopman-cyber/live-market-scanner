@@ -16,6 +16,7 @@ import (
 
 	"github.com/eelkonkoopman/marketscanner/internal/core"
 	"github.com/eelkonkoopman/marketscanner/internal/dlevel"
+	"github.com/eelkonkoopman/marketscanner/internal/logx"
 )
 
 // Engine implements core.Engine.
@@ -461,7 +462,12 @@ func (e *Engine) Retain(members map[string]struct{}) {
 // SetFloats / SetSecTypes / SetBaseline hot-swap the reference data via
 // atomic pointers; the merger picks up the new pointer on its next tick.
 func (e *Engine) SetFloats(f map[string]core.FloatRef) { e.floats.Store(&f) }
-func (e *Engine) SetSecTypes(m map[string]string)      { e.secTypes.Store(&m) }
+func (e *Engine) SetSecTypes(m map[string]string) {
+	e.secTypes.Store(&m)
+	if e.sig != nil {
+		e.sig.secTypes.Store(&m)
+	}
+}
 func (e *Engine) SetBaseline(b *core.BaselineTable) {
 	if b != nil {
 		e.baseline.Store(b)
@@ -694,6 +700,9 @@ func (e *Engine) runClock(ctx context.Context) {
 			return
 		case now := <-tk.C:
 			sec := now.Unix()
+			if sec%300 == 0 {
+				e.logEmvBlocked()
+			}
 			e.refreshEtOff() // a DST change lands within a second; the shards read it once per tick
 			for _, s := range e.shards {
 				select {
@@ -703,6 +712,27 @@ func (e *Engine) runClock(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// EmvBlocked reports how many intrabar 9EMA VWAP crosses the universe blocked
+// (geometrically valid, counted once per symbol-minute), per leg: the bar's $
+// volume, RVOL, and everything else.
+func (e *Engine) EmvBlocked() (dv, rvol, other int64) {
+	if e.sig == nil {
+		return 0, 0, 0
+	}
+	b := &e.sig.emvBlocked
+	return b[emvLegDv-1].Load(), b[emvLegRvol-1].Load(), b[emvLegOther-1].Load()
+}
+
+// logEmvBlocked writes the blocked-cross totals (every 5 minutes, only when
+// the 9EMA VWAP judge is on).
+func (e *Engine) logEmvBlocked() {
+	if e.sig == nil || !e.sig.emv {
+		return
+	}
+	dv, rvol, other := e.EmvBlocked()
+	logx.L().Info("emavwap: intrabar crosses blocked by the universe", "dv", dv, "rvol", rvol, "other", other)
 }
 
 // runMerger requests per-shard rows every tick, assembles a fresh immutable

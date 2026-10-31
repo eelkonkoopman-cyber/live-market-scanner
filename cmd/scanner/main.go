@@ -35,6 +35,7 @@ import (
 	"github.com/eelkonkoopman/marketscanner/internal/ingest"
 	"github.com/eelkonkoopman/marketscanner/internal/logx"
 	"github.com/eelkonkoopman/marketscanner/internal/news"
+	"github.com/eelkonkoopman/marketscanner/internal/newsfilter"
 	"github.com/eelkonkoopman/marketscanner/internal/orderticket"
 	"github.com/eelkonkoopman/marketscanner/internal/persist"
 	"github.com/eelkonkoopman/marketscanner/internal/prefill"
@@ -590,6 +591,17 @@ func run() error {
 		hl.Off("rtprAlerts")
 	}
 
+	// Newsfilter (newsfilter.io), the cheaper RTPR candidate: RECORD-ONLY. It
+	// notes when each article arrives into ~/.marketscanner/newsrace so
+	// `go run ./cmd/newsrace` can compare it with RTPR's delivery times. It feeds
+	// nothing: no news.Poller.AddExternal, no panel, alerts, summarizer, health,
+	// WS hub or database. SCANNER_NEWSFILTER=0 keeps it off even with a token.
+	var nfs *newsfilter.Stream
+	if tok := config.NewsfilterToken(); tok != "" {
+		nfs = newsfilter.New(newsfilter.Config{Token: tok, Dir: filepath.Join(config.ConfigDir(), "newsrace")})
+		logx.L().Info("newsfilter recorder enabled: records delivery times only, feeds nothing (token from env or ~/.marketscanner/newsfiltertoken)")
+	}
+
 	// SEC EDGAR 13G/13G-A watcher: catches ownership-stake disclosures that
 	// almost never get a wire press release (they're filed by the acquiring
 	// investor, not the company), so Benzinga/RTPR never see them. Public
@@ -687,7 +699,9 @@ func run() error {
 			SetMeta:   db.SetMeta,
 			Group:     envInt("SCANNER_TWS_GROUP", 0),
 			Seed:      fc.IntradayWithPrevDay,
-			OnTracked: chartUnion.SetTicket,
+			// the chart tap (lossy; the windows' bars) AND the lossless ticket
+			// tap the soft stop prices from (ingest.TicketNotify)
+			OnTracked: func(syms []string) { chartUnion.SetTicket(syms); ing.SetTicketSyms(syms) },
 			// the scanner's IBKR short-stock store (no fetch of its own)
 			Shortable: func(sym string) (core.ShortRef, bool, int64) {
 				r, ok := shortStore.Map()[sym]
@@ -699,6 +713,20 @@ func run() error {
 					return fl.LatestPowerSetup(sym)
 				}
 				return false, 0, 0, false
+			},
+			// the symbol's newest 9EMA VWAP bull cross today (the VWAP X preset)
+			LatestVwapBull: func(sym string) (int64, bool) {
+				if fl := psFlagLog.Load(); fl != nil {
+					return fl.LatestVwapBull(sym)
+				}
+				return 0, false
+			},
+			// the symbol's newest 9EMA VWAP bear cross today (VWAP X down, a short)
+			LatestVwapBear: func(sym string) (int64, bool) {
+				if fl := psFlagLog.Load(); fl != nil {
+					return fl.LatestVwapBear(sym)
+				}
+				return 0, false
 			},
 		})
 		if oerr != nil {
@@ -713,9 +741,6 @@ func run() error {
 			case <-ctx.Done():
 				return
 			case a := <-ing.ChartAggs():
-				if oticket != nil {
-					oticket.FeedAgg(a)
-				}
 				select {
 				case chartBars <- core.ChartBarMsg{
 					Sym: a.Sym, T: a.StartMs, O: a.Open, H: a.High, L: a.Low, C: a.Close,
@@ -727,7 +752,24 @@ func run() error {
 		}
 	}()
 
-	// Real Level 2 depth (internal/twslink, single-target): a fresh book
+	// The ticket's own price feed: the lossless ticket tap (never the lossy
+	// chart tap), so the soft stop sees every second of its symbols.
+	if oticket != nil {
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ing.TicketNotify():
+					for _, a := range ing.DrainTicket() {
+						oticket.FeedAgg(a)
+					}
+				}
+			}
+		}()
+	}
+
+		// Real Level 2 depth (internal/twslink, single-target): a fresh book
 	// snapshot sets it, a TWS-reported error/close clears it with the reason
 	// -- SetDepth/SetDepthUnavailable are both no-ops once tp's depth target
 	// has already moved on to a different symbol.
@@ -1061,6 +1103,9 @@ func run() error {
 	}
 	if rtp != nil {
 		start("rtpr", rtp.Run)
+	}
+	if nfs != nil {
+		start("newsfilter", nfs.Run)
 	}
 	if rtpAlerts != nil {
 		start("rtpr-alerts", rtpAlerts.Run)

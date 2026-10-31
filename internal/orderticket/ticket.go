@@ -321,6 +321,11 @@ type Config struct {
 	// PowerSetup reads sym's latest Power Setup today (flaglog): whether it was
 	// graded A+, its base range % and its bar time. nil = none (State.PsGrade nil).
 	PowerSetup func(sym string) (aplus bool, baseRange float64, barMs int64, ok bool)
+	// LatestVwapBull reads sym's newest 9EMA VWAP bull cross today (flaglog):
+	// the cross candle's START ms. nil = the VWAP X preset is unavailable.
+	LatestVwapBull func(sym string) (barStartMs int64, ok bool)
+	// LatestVwapBear: the same for the 9EMA VWAP BEAR cross (VWAP X down, a short).
+	LatestVwapBear func(sym string) (barStartMs int64, ok bool)
 	// WhatIfTimeout bounds the margin check in Prepare (default 5 s).
 	WhatIfTimeout time.Duration
 }
@@ -388,6 +393,7 @@ type whatIfRes struct {
 type Pending struct {
 	Token string  `json:"token"`
 	Side  string  `json:"side"` // BUY | SELL (short)
+	Kind  string  `json:"kind"` // "" (9EMA order) | "vwapx" (vwapx.go)
 	Sym   string  `json:"sym"`
 	Qty   int64   `json:"qty"`
 	Limit float64 `json:"limit"`
@@ -414,6 +420,8 @@ type Pending struct {
 	// soft stop for this order: StopOff = placed with its stop disabled
 	StopOff bool    `json:"stopOff"`
 	StopPct float64 `json:"stopPct"`
+	// vwapx: the cross candle's start (ms); PlannedStop is the REAL IB stop
+	CrossMs int64 `json:"crossMs"`
 	// Margin is the what-if check for exactly this Qty/Limit.
 	Margin *MarginCheck `json:"margin"`
 }
@@ -446,6 +454,13 @@ type OrderView struct {
 	ExitID      int64   `json:"exitId"`
 	ExitQty     int64   `json:"exitQty"`
 	ExitFilled  int64   `json:"exitFilled"`
+	// vwapx: the real IB stop child (its own status, like the TP child)
+	Kind     string  `json:"kind"`
+	SLID     int64   `json:"slId"`
+	CanStop  bool    `json:"canStop"`
+	SL       float64 `json:"sl"`
+	SLStatus string  `json:"slStatus"`
+	SLFilled int64   `json:"slFilled"`
 }
 
 // State is the whole picture the pane renders.
@@ -486,6 +501,10 @@ type State struct {
 	// active, shown on the risk row and overridable; the server sizes whatever
 	// risk the pane sends.
 	PsGrade *PsGrade `json:"psGrade"`
+	// Vwapx: the VWAP X preset for Sym (vwapx.go); always present
+	Vwapx *Vwapx `json:"vwapx"`
+	// VwapxBear: the short mirror (VWAP X down); always present
+	VwapxBear *Vwapx `json:"vwapxBear"`
 }
 
 // PsGrade is the symbol's latest Power Setup grade (core.PsIsAplus).
@@ -527,7 +546,17 @@ type ord struct {
 	FollowUntil   int64 // ms
 	PlacedAt      int64
 	tpGuard            // TP-fill confirmation (tpguard.go)
+	tpVerify           // TP limit verified against TWS's echo (tpverify.go)
+	tpFillSent bool    // the TP was re-sent at the entry's fill average
 	cancelled     bool // the user asked to cancel
+	// VWAP X (vwapx.go): Kind "vwapx" = entry + TP child + REAL stop child at IB
+	Kind     string
+	SLID     int64   // the IB stop child
+	SLPermID int64   // its perm id
+	SLStatus string  // its status
+	SLFilled int64   // shares the stop sold
+	SLPx     float64 // stop trigger
+	CrossMs  int64
 }
 
 func finished(st string) bool {
@@ -580,6 +609,7 @@ type Ticket struct {
 	pending *Pending
 	orders  map[int64]*ord // by parent id
 	byChild map[int64]*ord
+	bySL    map[int64]*ord // VWAP X stop child id -> order
 	note    string
 	tracked string
 	seeding map[string]bool
@@ -602,6 +632,12 @@ type Ticket struct {
 	pvRisk   float64
 	md       mdSub // live shortable-shares subscription (mktdata.go)
 	mdSeq    int64
+
+	// soft-stop price lines + last price per symbol (stopsrc.go)
+	stopMD    map[string]*stopSub
+	stopMDIDs map[int64]string
+	stopMDSeq int64
+	pxSeen    map[string]time.Time
 	pvMark   map[string]previewMark
 	previews map[string]*Preview
 }
@@ -620,7 +656,7 @@ func New(cfg Config) (*Ticket, error) {
 	t := &Ticket{
 		cfg: cfg, book: newBook(), settings: DefaultSettings(), conn: "disconnected",
 		known: map[int64]auditRec{}, conSym: map[int64]string{}, cdReq: map[int64]int64{}, nextCD: cdReqBase,
-		orders: map[int64]*ord{}, byChild: map[int64]*ord{}, seeding: map[string]bool{},
+		orders: map[int64]*ord{}, byChild: map[int64]*ord{}, bySL: map[int64]*ord{}, seeding: map[string]bool{},
 		funds: map[string]map[string]float64{}, whatIfs: map[int64]chan whatIfRes{},
 		pvMark: map[string]previewMark{}, previews: map[string]*Preview{}, byExit: map[int64]*ord{}, tape: map[string][]tapePt{},
 		wiIDs: map[int64]bool{}, fundsCur: map[string]string{},
@@ -764,6 +800,9 @@ func fmtQty(q int64) string {
 }
 
 func confirmText(p Pending) string {
+	if p.Kind == kindVwapx {
+		return vwapxText(p)
+	}
 	verb := "BUY"
 	if p.Side == "SELL" {
 		verb = "SHORT"
@@ -778,6 +817,9 @@ func confirmText(p Pending) string {
 	}
 	if p.Preset == presetPower {
 		s = "POWER SETUP: " + s
+	}
+	if p.Preset == presetNews {
+		s = "NEWS FLAG: " + s
 	}
 	if p.PlannedStop > 0 && (p.RiskUSD > 0 || p.Risk > 0) {
 		s += fmt.Sprintf(", risk $%s (stop %s)", fmtQty(int64(math.Round(p.Risk))), fmtPx(p.PlannedStop))
@@ -904,6 +946,9 @@ func (t *Ticket) entryOrder(o *ord, transmit bool) *Order {
 }
 
 func (t *Ticket) tpOrder(o *ord) *Order {
+	if o.Kind == kindVwapx { // a re-send of the bracket's TP (tpverify): keeps its shape
+		return t.vwapxTP(o, true)
+	}
 	x := &Order{}
 	if o.Side == "BUY" {
 		x.Action = "SELL"
@@ -1128,7 +1173,7 @@ func (t *Ticket) SetFallbackSymbol(sym string) {
 // FeedAgg folds one live per-second aggregate (only tracked symbols are kept).
 func (t *Ticket) FeedAgg(a core.Agg) {
 	t.book.feed(a)
-	t.onPrice(a.Sym, a.Close)
+	t.onAggPx(a.Sym, a.Close, a.Low, a.High)
 }
 
 func (t *Ticket) currentSymLocked() (string, string) {
@@ -1180,6 +1225,12 @@ func (t *Ticket) PrepareOrder(side string, positionUSD float64, shares int64, sy
 	if err != nil {
 		return Pending{}, err
 	}
+	return t.finishPrepare(p)
+}
+
+// finishPrepare is the tail every prepare shares: the what-if margin check,
+// the share-count trim, the pending line. p is already sized and validated.
+func (t *Ticket) finishPrepare(p Pending) (Pending, error) {
 	t.mu.Lock()
 	if t.conn != "connected" || t.client == nil || !t.haveNext {
 		err := t.refuse("not connected to TWS")
@@ -1389,13 +1440,17 @@ func perShareRisk(side string, limit, stop float64) float64 {
 	return stop - limit
 }
 
-// riskSize: floor(risk / per-share loss), trimmed by the max position $.
+// commissionPerShare estimates the round trip's commission and fees per share
+// (VCIG 2026-10-30: about $18 on 3,037 shares); sizing counts it as risk.
+var commissionPerShare = 0.006
+
+// riskSize: floor(risk / (per-share loss + commission)), trimmed by the max position $.
 func riskSize(side string, risk, limit, stop, maxUSD float64) (int64, string) {
 	per := perShareRisk(side, limit, stop)
 	if !(per > 0) || !(limit > 0) {
 		return 0, ""
 	}
-	q := int64(math.Floor(risk/per + 1e-9))
+	q := int64(math.Floor(risk/(per+commissionPerShare) + 1e-9))
 	bound := ""
 	if capQ := int64(math.Floor(maxUSD/limit + 1e-9)); q > capQ {
 		q, bound = capQ, "max position $"
@@ -1539,6 +1594,13 @@ func (t *Ticket) Confirm(token, sym string) error {
 	if !strings.EqualFold(cur, p.Sym) || (sym != "" && !strings.EqualFold(sym, p.Sym)) {
 		return fail(fmt.Sprintf("symbol mismatch: ticket %s, TWS %s", p.Sym, cur))
 	}
+	if p.Kind == kindVwapx { // 3-order bracket; no 9EMA involved (vwapx.go)
+		acts, err := t.confirmVwapxLocked(p, now)
+		t.mu.Unlock()
+		run(acts)
+		t.retrack()
+		return err
+	}
 	q := t.quoteLocked(p.Sym, now)
 	if !t.emaUsableLocked(q) {
 		return fail(t.staleMsgLocked(q))
@@ -1583,6 +1645,7 @@ func (t *Ticket) Confirm(token, sym string) error {
 	t.presetToOrderLocked(o, p, now)
 	o.EMALive, o.lastFollowAt = t.settings.EMALive, now
 	o.noteTP(o.TP)
+	o.noteTPSent(o.TP, now)
 	o.childQty = o.Qty
 	t.nextID += 2
 	t.orders[o.ID] = o
@@ -1654,7 +1717,7 @@ func (t *Ticket) CancelAll() error {
 	t.mu.Lock()
 	var acts []func()
 	for _, o := range t.orders {
-		if o.parentActive() || o.childActive() {
+		if o.parentActive() || o.childActive() || o.slActive() {
 			a, _ := t.cancelLocked(o)
 			acts = append(acts, a...)
 		}
@@ -1679,6 +1742,9 @@ func (t *Ticket) cancelLocked(o *ord) ([]func(), error) {
 	case o.childActive():
 		id = o.ChildID
 		o.Note = "TP cancel sent"
+	case o.slActive():
+		id = o.SLID
+		o.Note = "stop cancel sent"
 	default:
 		return nil, errors.New("order is not working")
 	}
@@ -1705,6 +1771,7 @@ func (t *Ticket) Disconnect() {
 	t.pending = nil
 	wasUp := t.conn == "connected"
 	mdID := t.md.reqID
+	stopIDs := t.stopMDIDsLocked()
 	c := t.teardownLocked("disconnected", "")
 	t.mu.Unlock()
 	if c != nil {
@@ -1713,6 +1780,9 @@ func (t *Ticket) Disconnect() {
 				c.CancelAccountSummary(acctReqID)
 				if mdID != 0 {
 					c.CancelMktData(mdID)
+				}
+				for _, id := range stopIDs {
+					c.CancelMktData(id)
 				}
 			}
 			_ = c.Disconnect()
@@ -1730,6 +1800,7 @@ func (t *Ticket) teardownLocked(state, note string) EClient {
 	t.twsSym, t.twsConID = "", 0
 	t.funds = map[string]map[string]float64{}
 	t.md = mdSub{}
+	t.stopMD, t.stopMDIDs = map[string]*stopSub{}, map[int64]string{} // TWS drops them with the socket
 	t.pvMark, t.previews = map[string]previewMark{}, map[string]*Preview{}
 	for id, ch := range t.whatIfs {
 		select {
@@ -1816,7 +1887,7 @@ func (t *Ticket) session() {
 	c.SubscribeToGroupEvents(groupReqID, t.cfg.Group)
 	c.ReqAccountSummary(acctReqID, "All", acctTags) // stays subscribed; cancelled on Disconnect
 	t.mu.Lock()
-	mdActs := t.syncMktDataLocked()
+	mdActs := append(t.syncMktDataLocked(), t.syncStopMDLocked()...)
 	t.mu.Unlock()
 	run(mdActs)
 	c.ReqOpenOrders() // reconcile: only this client id's orders; only known ids adopted
@@ -1897,6 +1968,9 @@ func (t *Ticket) onError(gen, reqID, code int64, msg string) {
 	if !t.live(gen) {
 		return
 	}
+	if t.stopMDErrorLocked(reqID, code, msg) { // stop price line: shown with SL blind
+		return
+	}
 	if t.mdErrorLocked(reqID, code, msg) { // market data: tile tooltip only
 		return
 	}
@@ -1910,6 +1984,9 @@ func (t *Ticket) onError(gen, reqID, code int64, msg string) {
 	}
 	if t.wiIDs[reqID] { // a late answer to a finished what-if: never the banner
 		return
+	}
+	if f := t.orderErrorRecLocked(reqID, code, msg); f != nil {
+		f()
 	}
 	if o := t.orders[reqID]; o != nil {
 		o.Note = text
@@ -2043,6 +2120,8 @@ func (t *Ticket) onOpenOrder(gen, id int64, c *Contract, x *Order, st *OrderStat
 	if c == nil || x == nil {
 		return
 	}
+	var post []func()
+	defer func() { run(post) }() // after the unlock below
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if !t.live(gen) {
@@ -2098,10 +2177,15 @@ func (t *Ticket) onOpenOrder(gen, id int64, c *Contract, x *Order, st *OrderStat
 			o.Following = x.TIF == "DAY"
 			o.EMALive = t.settings.EMALive // not audited: the current mode
 			t.orders[id] = o
-			t.restoreStopLocked(o, k)
+			t.restoreStopLocked(o, k) // (a VWAP X order: no follow, no soft stop)
 			// a child seen first
 			for cid, k2 := range t.known {
 				if k2.ParentID == id {
+					if k2.Note == vwapxSLNote {
+						o.SLID = cid
+						t.bySL[cid] = o
+						continue
+					}
 					o.ChildID = cid
 					t.byChild[cid] = o
 				}
@@ -2136,10 +2220,19 @@ func (t *Ticket) onOpenOrder(gen, id int64, c *Contract, x *Order, st *OrderStat
 		t.orders[o.ID] = o
 		t.restoreStopLocked(o, pk)
 	}
+	if strings.HasSuffix(x.OrderRef, ":sl") && o.Kind == kindVwapx { // the real IB stop child
+		o.SLID, o.SLPermID = id, x.PermID
+		if stat != "" {
+			o.SLStatus = stat
+		}
+		t.bySL[id] = o
+		return
+	}
 	o.ChildID = id
 	o.ChildPermID = x.PermID
-	o.TP = x.LmtPrice
-	o.noteTP(o.TP)
+	// TWS's limit is recorded and checked against what the ticket sent; it
+	// never silently becomes the intended TP (tpverify.go).
+	post = append(post, t.tpEchoLocked(o, x.LmtPrice, t.now())...)
 	if q := x.TotalQuantity.Int(); q > 0 {
 		o.childQty = q
 	}
@@ -2184,9 +2277,11 @@ func (t *Ticket) onOrderStatus(gen int64, m statusMsg) {
 			acts = append(acts, t.beRefillLocked(o)...)
 		}
 		// The TP follows the fill average once there is one (not once the stop fired).
-		if filled > 0 && o.Avg > 0 && o.childActive() && (o.StopState == "" || o.StopState == stArmed) {
-			if tp := o.tpAt(o.Avg, o.StopLevel); tp != o.TP {
+		// On the first fill it is ALWAYS re-sent (and then verified by the echo).
+		if filled > 0 && o.Avg > 0 && o.childActive() && (o.StopState == "" || o.StopState == stArmed) && o.Kind != kindVwapx {
+			if tp := o.tpAt(o.Avg, o.StopLevel); tp != o.TP || !o.tpFillSent {
 				o.TP = tp
+				o.tpFillSent = true
 				acts = append(acts, t.sendTPLocked(o, "tp->fill avg")...)
 			}
 		}
@@ -2201,6 +2296,15 @@ func (t *Ticket) onOrderStatus(gen int64, m statusMsg) {
 		}
 		mm := m
 		o.childMsg = &mm
+		o.lastMsg = m.String()
+		acts = append(acts, t.stopProgressLocked(o, t.now())...)
+	} else if o := t.bySL[id]; o != nil {
+		acts = append(acts, t.statusRec(o, m, "sl"))
+		o.SLStatus = status
+		o.SLFilled = filled
+		if permID != 0 && o.SLPermID == 0 {
+			o.SLPermID = permID
+		}
 		o.lastMsg = m.String()
 		acts = append(acts, t.stopProgressLocked(o, t.now())...)
 	} else if o := t.byExit[id]; o != nil {
@@ -2220,8 +2324,10 @@ func (t *Ticket) sendTPLocked(o *ord, why string) []func() {
 	if c == nil {
 		return nil
 	}
+	o.TP = o.tpSafe(o.TP) // never a long TP at/below the fill (short: at/above)
 	x := t.tpOrder(o)
 	o.noteTP(o.TP)
+	o.noteTPSent(o.TP, t.now())
 	rec := auditRec{Ev: "modify", ID: o.ChildID, ParentID: o.ID, Sym: o.Sym, Limit: o.TP, Note: why}
 	id := o.ChildID
 	return []func(){func() { t.record(rec); c.PlaceOrder(id, contractFor(o.Sym), x) }}
@@ -2269,6 +2375,8 @@ func (t *Ticket) Tick(ctx context.Context) {
 		acts = append(acts, t.entryTimeoutLocked(now)...)
 		acts = append(acts, t.followLocked(now)...)
 		acts = append(acts, t.stopTickLocked(now)...)
+		acts = append(acts, t.syncStopMDLocked()...) // after the stop pass: a finished stop's line goes now
+		acts = append(acts, t.tpVerifyTickLocked(now)...)
 	}
 	t.mu.Unlock()
 	if lost != nil {
@@ -2287,7 +2395,7 @@ func (t *Ticket) followLocked(now time.Time) []func() {
 	var acts []func()
 	c := t.client
 	for _, o := range t.orders {
-		if !o.Following {
+		if !o.Following || o.Kind == kindVwapx {
 			continue
 		}
 		if !o.parentActive() || o.cancelled {
@@ -2390,7 +2498,7 @@ func (t *Ticket) retrack() {
 		t.lastSym = cur
 		t.note = "" // a banner note belongs to the symbol it was about
 	}
-	mdActs := t.syncMktDataLocked()
+	mdActs := append(t.syncMktDataLocked(), t.syncStopMDLocked()...)
 	key := strings.Join(syms, ",")
 	changed := key != t.tracked
 	t.tracked = key
@@ -2494,12 +2602,14 @@ func (t *Ticket) State() State {
 			s.PsGrade = g
 		}
 	}
+	s.Vwapx = t.vwapxLocked(s.Sym, s.Quote, now)
+	s.VwapxBear = t.vwapxSideLocked("SELL", s.Sym, s.Quote, now)
 	if p := t.previews[s.Sym]; p != nil && s.Sym != "" {
 		cp := *p
 		s.Preview = &cp
 	}
 	for _, o := range t.orders {
-		active := o.parentActive() || o.childActive() || o.stopWatching()
+		active := o.parentActive() || o.childActive() || o.slActive() || o.stopWatching()
 		if o.stopWatching() {
 			s.StopWarn = "Soft stop needs the scanner + TWS running"
 			if t.conn != "connected" {
@@ -2508,6 +2618,18 @@ func (t *Ticket) State() State {
 		}
 		if o.stopAlert != "" && s.StopAlert == "" {
 			s.StopAlert = o.stopAlert
+		}
+		if o.tpAlert != "" && !finished(o.ChildStatus) {
+			if s.StopAlert != "" {
+				s.StopAlert += " · "
+			}
+			s.StopAlert += o.tpAlert
+		}
+		if o.blindAlert != "" {
+			if s.StopAlert != "" {
+				s.StopAlert += " · "
+			}
+			s.StopAlert += o.blindAlert
 		}
 		if !active && now.UnixMilli()-o.PlacedAt > 6*3600*1000 && o.PlacedAt != 0 {
 			continue
@@ -2518,6 +2640,7 @@ func (t *Ticket) State() State {
 			Following: o.Following, Note: o.Note, Active: active,
 			StopLevel: o.StopLevel, StopState: o.StopState, StopOn: !o.StopOff, StopLabel: stopLabel(o), StopBE: o.BE, CanBE: o.manualBEOK(), PresetLabel: presetLabel(o),
 			ExitID: o.ExitID, ExitQty: o.ExitQty, ExitFilled: o.ExitFilled, FollowLabel: t.followLabelLocked(o),
+			CanStop: o.canMoveStop(), Kind: o.Kind, SLID: o.SLID, SL: o.SLPx, SLStatus: o.SLStatus, SLFilled: o.SLFilled,
 		})
 	}
 	for i := 1; i < len(s.Orders); i++ {

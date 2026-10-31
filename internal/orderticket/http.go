@@ -2,6 +2,7 @@ package orderticket
 
 import (
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/url"
@@ -42,9 +43,11 @@ type actionReq struct {
 	Settings        Settings `json:"settings"`
 	Max             float64  `json:"max"`
 	TPPct           float64  `json:"tpPct"`
+	Px              float64  `json:"px"` // movestop
 	On              bool     `json:"on"`
 	StopOn          *bool    `json:"stopOn"` // prepare: soft stop on (default) / off
 	RiskUSD         float64  `json:"riskUsd"`
+	Kind            string   `json:"kind"` // prepare: "" (9EMA order) | "vwapx"
 	Preset          string   `json:"preset"`
 	Trail5m         bool     `json:"trail5m"`
 	EntryTimeoutMin int      `json:"entryTimeoutMin"`
@@ -106,6 +109,15 @@ func (t *Ticket) serve(w http.ResponseWriter, r *http.Request) {
 	case "disconnect":
 		t.Disconnect()
 	case "prepare":
+		if q.Kind == kindVwapx {
+			// side "" / BUY = VWAP X (bull cross, long); SELL = VWAP X down (bear cross, short)
+			if s := strings.ToUpper(q.Side); s != "" && s != "BUY" && s != "SELL" {
+				err = errors.New("VWAP X side must be BUY or SELL")
+			} else {
+				out, err = t.PrepareVwapxSide(s, q.PositionUSD, q.Shares, q.Sym, q.RiskUSD)
+			}
+			break
+		}
 		out, err = t.PrepareOrder(q.Side, q.PositionUSD, q.Shares, q.Sym, q.TPPct, q.StopOn != nil && !*q.StopOn, q.RiskUSD)
 	case "previewsize":
 		t.SetPreviewSize(q.PositionUSD, q.Shares, q.RiskUSD)
@@ -113,6 +125,8 @@ func (t *Ticket) serve(w http.ResponseWriter, r *http.Request) {
 		out, err = t.PrepareClose(q.Sym)
 	case "preset":
 		err = t.SetPreset(r.Context(), q.Preset, q.Trail5m, q.EntryTimeoutMin)
+	case "movestop":
+		err = t.MoveStop(q.ID, q.Px)
 	case "stopbe":
 		err = t.MoveStopToEntry(q.ID)
 	case "stopbesym":

@@ -193,7 +193,9 @@ export function SignalChart({ sym, candles, tfMin, prevClose, setup, emaPeriod, 
       const ema = makeInstance('ema', { period: Math.max(1, Math.floor(emaPeriod) || 9) });
       if (ema) {
         ema.styleOverrides = { value: { color: FLAG_EMA_COLOR, lineWidth: 2 } };
-        chart.setIndicators([ema]);
+        // VWAP alongside the 9 EMA (user, 2026-10-29: "add VWAP to the chart").
+        const vw = makeInstance('vwap', {});
+        chart.setIndicators(vw ? [ema, vw] : [ema]);
         return;
       }
     }

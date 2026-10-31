@@ -11,11 +11,14 @@ package orderticket
 // EMA, raise-only for a long, lower-only for a short. Level, percent and the
 // follow flag are audited ("stop" records) so a restart/reconnect re-arms it.
 //
-// Trigger: on each live price from the scanner's aggregate tap (FeedAgg - the
-// same price the ticket shows) the condition is last <= stop (long) / >= stop
-// (short). Debounce: it must hold on 2 consecutive prices, or stay true for
-// 1 s (checked again on the 1 s loop), whichever comes first; one print back
-// on the right side resets it.
+// Trigger: two independent price sources (stopsrc.go) - the scanner's
+// per-second aggregates (FeedAgg; the second's LOW for a long, HIGH for a
+// short) and TWS's own last-trade ticks (reqMktData per stopped symbol). The
+// condition is px <= stop (long) / >= stop (short). Debounce, per source: it
+// must hold on 2 consecutive prices, or stay true for 1 s (checked again on
+// the 1 s loop), whichever comes first; one print back on the right side
+// resets that source. Whichever source confirms first triggers. An armed stop
+// with no price from either source for > 3 s raises "SL blind" (red).
 //
 // Exit (OCA), never overselling:
 //  1. cancel the remaining entry (if it still works) and the TP child;
@@ -63,8 +66,9 @@ type stop struct {
 	StopLevel    float64
 	StopOff      bool // the user disabled it
 	StopState    string
-	stopHits     int
-	stopFirstHit time.Time
+	stopDeb      [nPxSrc]stopDeb // debounce, one per price source (stopsrc.go)
+	blindSince   time.Time       // SL blind latch (stopsrc.go); zero = not blind
+	blindAlert   string
 	stopBar      int64
 	cancelAt     time.Time // last cancel send (entry/TP) while triggered
 	ExitID       int64
@@ -82,7 +86,7 @@ type stop struct {
 	BEOffsetPct float64
 }
 
-func (o *ord) held() int64 { return o.Filled - o.ChildFilled - o.ExitFilled }
+func (o *ord) held() int64 { return o.Filled - o.ChildFilled - o.SLFilled - o.ExitFilled }
 
 func (o *ord) stopWatching() bool {
 	return !o.StopOff && (o.StopState == stArmed || o.StopState == stTriggered || o.StopState == stExiting)
@@ -90,19 +94,21 @@ func (o *ord) stopWatching() bool {
 
 // stopLevelFor: EMA-based level with the fill-price fallback.
 func stopLevelFor(side string, ema, fill, pct float64) float64 {
+	// measured from the lower of 9EMA and fill (long; the higher for a short),
+	// so a fill through the EMA never leaves the stop closer than pct to the entry
 	p := pct / 100
 	if side == "BUY" {
-		lv := snapPrice(ema*(1-p), false)
-		if !(ema > 0) || !(lv > 0) || lv >= fill {
-			lv = snapPrice(fill*(1-p), false)
+		base := fill
+		if ema > 0 && ema < fill {
+			base = ema
 		}
-		return lv
+		return snapPrice(base*(1-p), false)
 	}
-	lv := snapPrice(ema*(1+p), true)
-	if !(ema > 0) || lv <= fill {
-		lv = snapPrice(fill*(1+p), true)
+	base := fill
+	if ema > fill {
+		base = ema
 	}
-	return lv
+	return snapPrice(base*(1+p), true)
 }
 
 func stopHit(side string, last, level float64) bool {
@@ -141,7 +147,12 @@ func (t *Ticket) stopRec(o *ord, why string) func() {
 }
 
 // onPrice is one live price for sym (from FeedAgg).
-func (t *Ticket) onPrice(sym string, last float64) {
+// The stop's trigger value is the aggregate's LOW for a long (HIGH for a
+// short), not its close: a second that traded through the stop counts even if
+// it closed back above (see stopsrc.go for the trade-off).
+func (t *Ticket) onPrice(sym string, last float64) { t.onAggPx(sym, last, last, last) }
+
+func (t *Ticket) onAggPx(sym string, last, lo, hi float64) {
 	if !(last > 0) {
 		return
 	}
@@ -149,12 +160,13 @@ func (t *Ticket) onPrice(sym string, last float64) {
 	t.mu.Lock()
 	var acts []func()
 	t.tapeAddLocked(sym, last, now)
+	t.pxSeenLocked(sym, now)
 	for _, o := range t.orders {
 		if o.Sym == sym {
 			acts = append(acts, t.dropCheckLocked(o, last, now, true)...)
 			acts = append(acts, t.beCheckLocked(o, last)...)
 			acts = append(acts, t.trailCheckLocked(o, last, now)...)
-			acts = append(acts, t.stopCheckLocked(o, last, now, true)...)
+			acts = append(acts, t.stopCheckLocked(o, aggTrig(o.Side, last, lo, hi), now, true, srcAgg)...)
 		}
 	}
 	t.mu.Unlock()
@@ -163,29 +175,36 @@ func (t *Ticket) onPrice(sym string, last float64) {
 
 // stopCheckLocked applies the debounce; fresh=false is a re-check of the
 // current price (1 s rule / reconnect) that does not count as a new print.
-func (t *Ticket) stopCheckLocked(o *ord, last float64, now time.Time, fresh bool) []func() {
-	if o.StopState != stArmed || o.StopOff || t.conn != "connected" || t.client == nil {
+// Each price source (Massive aggregates, TWS ticks) is debounced on its own,
+// so a late print from the slower source never resets the faster one; the
+// first source to confirm triggers.
+func (t *Ticket) stopCheckLocked(o *ord, last float64, now time.Time, fresh bool, src int) []func() {
+	if o.StopState != stArmed || o.StopOff || t.conn != "connected" || t.client == nil || !(last > 0) {
 		return nil
+	}
+	d := &o.stopDeb[src]
+	if fresh {
+		d.last, d.have = last, true
 	}
 	if !stopHit(o.Side, last, o.StopLevel) {
 		if fresh {
-			o.stopHits = 0
+			d.hits = 0
 		}
 		return nil
 	}
-	if o.stopHits == 0 {
-		o.stopFirstHit = now
+	if d.hits == 0 {
+		d.first = now
 	}
-	if fresh || o.stopHits == 0 {
-		o.stopHits++
+	if fresh || d.hits == 0 {
+		d.hits++
 	}
-	if o.stopHits < 2 && now.Sub(o.stopFirstHit) < stopConfirmAfter {
+	if d.hits < 2 && now.Sub(d.first) < stopConfirmAfter {
 		return nil
 	}
 	o.StopState = stTriggered
 	o.Following = false
-	o.Note = fmt.Sprintf("soft stop hit at %s", fmtPx(last))
-	return append([]func(){t.stopRec(o, "triggered at "+fmtPx(last))}, t.stopCancelsLocked(o, now)...)
+	o.Note = fmt.Sprintf("soft stop hit at %s (%s)", fmtPx(last), srcName[src])
+	return append([]func(){t.stopRec(o, "triggered at "+fmtPx(last)+" ("+srcName[src]+")")}, t.stopCancelsLocked(o, now)...)
 }
 
 // stopCancelsLocked (re)sends the cancels the exit waits for.
@@ -204,6 +223,11 @@ func (t *Ticket) stopCancelsLocked(o *ord, now time.Time) []func() {
 	if o.childActive() || o.tpUnconfirmed() { // an unconfirmed "Filled" TP may still work
 		id := o.ChildID
 		rec := auditRec{Ev: "cancel", ID: id, Sym: o.Sym, Note: "soft stop (OCA)"}
+		acts = append(acts, func() { t.record(rec); c.CancelOrder(id) })
+	}
+	if o.slActive() { // VWAP X: the real IB stop must be gone before anything is sold (CLOSE)
+		id := o.SLID
+		rec := auditRec{Ev: "cancel", ID: id, Sym: o.Sym, Note: "close (IB stop of a VWAP X order)"}
 		acts = append(acts, func() { t.record(rec); c.CancelOrder(id) })
 	}
 	return acts
@@ -227,7 +251,7 @@ func (t *Ticket) stopProgressLocked(o *ord, now time.Time) []func() {
 		o.stopAlert = ""
 		return []func(){t.stopRec(o, "TP filled; confirmed by "+o.childMsg.String())}
 	case stTriggered:
-		if o.parentActive() || o.childActive() { // not confirmed yet: never sell
+		if o.parentActive() || o.childActive() || o.slActive() { // not confirmed yet: never sell
 			if now.Sub(o.cancelAt) >= stopResendEvery {
 				return t.stopCancelsLocked(o, now)
 			}
@@ -254,7 +278,7 @@ func (t *Ticket) stopProgressLocked(o *ord, now time.Time) []func() {
 			o.Note = "soft stop: nothing held (TP filled)"
 			return []func(){t.stopRec(o, "nothing held; last "+o.lastMsg)}
 		}
-		last := t.quoteLocked(o.Sym, now).Price
+		last := t.stopLastLocked(o.Sym, now)
 		if !(last > 0) {
 			last = o.StopLevel
 		}
@@ -281,7 +305,7 @@ func (t *Ticket) stopProgressLocked(o *ord, now time.Time) []func() {
 		if finished(o.ExitStatus) || o.exitReprices >= stopMaxReprices || now.Sub(o.exitAt) < stopRepriceEvery {
 			return nil
 		}
-		last := t.quoteLocked(o.Sym, now).Price
+		last := t.stopLastLocked(o.Sym, now)
 		if !(last > 0) {
 			return nil
 		}
@@ -348,11 +372,23 @@ func (t *Ticket) stopTickLocked(now time.Time) []func() {
 	recheck := t.stopRecheck
 	t.stopRecheck = false
 	for _, o := range t.orders {
-		if o.StopState == stArmed && (recheck || o.stopHits > 0) {
-			if last := t.quoteLocked(o.Sym, now).Price; last > 0 {
-				acts = append(acts, t.stopCheckLocked(o, last, now, false)...)
+		for src := range o.stopDeb {
+			if o.StopState != stArmed {
+				break
+			}
+			d := &o.stopDeb[src]
+			if !recheck && d.hits == 0 {
+				continue
+			}
+			last := d.last
+			if !d.have && src == srcAgg {
+				last = t.quoteLocked(o.Sym, now).Price
+			}
+			if d.have || last > 0 {
+				acts = append(acts, t.stopCheckLocked(o, last, now, false, src)...)
 			}
 		}
+		acts = append(acts, t.blindCheckLocked(o, now)...)
 		acts = append(acts, t.stopFollowLocked(o, now)...)
 		acts = append(acts, t.stopProgressLocked(o, now)...)
 	}
@@ -367,12 +403,16 @@ func (t *Ticket) SetStopEnabled(id int64, on bool) error {
 		t.mu.Unlock()
 		return fmt.Errorf("order %d is not a ticket order", id)
 	}
+	if o.Kind == kindVwapx {
+		t.mu.Unlock()
+		return fmt.Errorf("a VWAP X order has a real stop at IB, no soft stop")
+	}
 	if o.StopState == stTriggered || o.StopState == stExiting {
 		t.mu.Unlock()
 		return fmt.Errorf("the stop already fired")
 	}
 	o.StopOff = !on
-	o.stopHits = 0
+	o.stopDeb = [nPxSrc]stopDeb{}
 	why := "disabled"
 	if on {
 		why = "enabled"
@@ -408,6 +448,10 @@ func (t *Ticket) SetStopSettings(ctx context.Context, pct float64, follow bool) 
 // A stop that had fired resumes from confirmed fills; if the audit shows an
 // exit order was placed, it is resumed (never a second exit).
 func (t *Ticket) restoreStopLocked(o *ord, k auditRec) {
+	if k.Kind == kindVwapx { // real stop at IB: no soft stop, no 9EMA follow / drop-cancel
+		o.Kind, o.StopOff, o.DropOff, o.Following = kindVwapx, true, true, false
+		return
+	}
 	o.Preset, o.TPR, o.Trail5m, o.DropOff, o.EntryDeadline, o.FillAt = k.Preset, k.TPR, k.Trail5m, k.DropOff, k.EntryDeadline, k.FillAt
 	if o.BEPct <= 0 && k.BEPct > 0 {
 		o.BEOff, o.BEPct, o.BEOffsetPct = k.BEOff, k.BEPct, k.BEOffsetPct
@@ -434,6 +478,9 @@ func (t *Ticket) restoreStopLocked(o *ord, k auditRec) {
 }
 
 func stopLabel(o *ord) string {
+	if o.Kind == kindVwapx && o.SLPx > 0 {
+		return fmt.Sprintf("SL %s (IB stop)", fmtPx(o.SLPx))
+	}
 	if o.StopLevel <= 0 {
 		return ""
 	}

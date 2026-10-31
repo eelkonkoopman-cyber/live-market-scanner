@@ -4,11 +4,13 @@
 // the X-Order-Ticket header the server requires (it forces a CORS preflight, so
 // no other web page can drive the ticket).
 
+import { etTime } from './flagEvents';
+
 export interface OTQuote { sym: string; price: number; ema: number; lastClosed: number; stale: boolean; bars: number; ageSec?: number; lastAt?: number; live?: boolean }
 export interface OTSettings { host: string; port: number; clientId: number; maxPositionUSD: number; tpLowPct: number; tpHighPct: number;
   stopPct?: number; stopFollow?: boolean; staleMin?: number; emaLive?: boolean;
   riskLow?: number; riskMid?: number; riskHigh?: number; followSec?: number;
-  preset?: 'custom' | 'power'; trail5m?: boolean; entryTimeoutMin?: number;
+  preset?: 'custom' | 'power' | 'newsflag'; trail5m?: boolean; entryTimeoutMin?: number;
   dropCancelOff?: boolean; dropPct?: number; dropSec?: number; nearPct?: number;
   beOff?: boolean; bePct?: number; beOffsetPct?: number;
   riskMode?: '$' | '%'; riskPctLow?: number; riskPctMid?: number; riskPctHigh?: number;
@@ -25,7 +27,7 @@ export interface OTFunds { account: string; avail: number; excess: number; buyin
   /** base units per 1 USD from TWS (USD ledger ExchangeRate); netLiqUsd = netLiq / usdRate; haveUsd false = no rate, % risk off */
   usdRate?: number; netLiqUsd?: number; haveUsd?: boolean; usdNote?: string }
 export interface OTPending {
-  token: string; side: 'BUY' | 'SELL' | 'CLOSE'; sym: string; qty: number; limit: number; tp: number; ema: number; text: string; at: number; tpPct?: number; stopOff?: boolean; stopPct?: number; warn?: string;
+  token: string; kind?: '' | 'vwapx'; crossMs?: number; plannedStop?: number; side: 'BUY' | 'SELL' | 'CLOSE'; sym: string; qty: number; limit: number; tp: number; ema: number; text: string; at: number; tpPct?: number; stopOff?: boolean; stopPct?: number; warn?: string;
   margin?: OTMargin | null;
 }
 export interface OTOrder {
@@ -33,6 +35,15 @@ export interface OTOrder {
   tp: number; status: string; childStatus: string; childFilled: number; following: boolean; note: string; active: boolean;
   followLabel?: string; stopLevel?: number; stopState?: '' | 'armed' | 'triggered' | 'exiting' | 'done' | 'disarmed'; stopOn?: boolean; stopLabel?: string; stopBe?: boolean; canBe?: boolean; presetLabel?: string;
   exitId?: number; exitQty?: number; exitFilled?: number;
+  /** VWAP X bracket: a real IB stop child (its own status), no soft stop */
+  canStop?: boolean; kind?: '' | 'vwapx'; slId?: number; sl?: number; slStatus?: string; slFilled?: number;
+}
+/** The VWAP X preset for the shown symbol (State.vwapx, internal/orderticket/vwapx.go). */
+export interface OTVwapx {
+  available: boolean; reason: string; crossMs: number; closesInSec: number;
+  entry: number; stop: number; tp: number; ageSec: number; stopPct: number;
+  /** SELL = VWAP X down (bear cross, a short); borrow (short only): ok | unknown. No SSR data exists. */
+  side?: 'BUY' | 'SELL'; borrow?: '' | 'ok' | 'unknown';
 }
 export interface OTState {
   conn: 'disconnected' | 'connecting' | 'connected' | 'lost' | 'error';
@@ -47,6 +58,8 @@ export interface OTState {
   short?: OTShort | null;
   // the loaded symbol's latest Power Setup today (null = none): A+ sizes at mult x risk with the Power Setup preset
   psGrade?: { aplus: boolean; baseRange: number; barMs: number; mult: number } | null;
+  vwapx?: OTVwapx | null;
+  vwapxBear?: OTVwapx | null;
 }
 
 export async function fetchState(): Promise<OTState> {
@@ -184,13 +197,124 @@ export function tpPctFor(choice: TPChoice, s: Pick<OTSettings, 'tpLowPct' | 'tpH
   return choice === 'low' ? s.tpLowPct || 1 : s.tpHighPct || 10;
 }
 
+/** The VWAP X prepare payload (BUY = bull cross, SELL = VWAP X down, a short); entry/stop/TP come from the cross candle on the server. */
+export function vwapxBody(shares: number, sym: string, riskUsd = 0, side: 'BUY' | 'SELL' = 'BUY') {
+  return { side, kind: 'vwapx' as const, positionUSD: 0, shares, sym, riskUsd };
+}
+
+/** The VWAP X button: label (countdown while the cross candle forms), enabled, tooltip. */
+export function vwapxButton(v: OTVwapx | null | undefined, canSize: boolean, connected: boolean, busy: boolean, side: 'BUY' | 'SELL' = 'BUY'): { label: string; enabled: boolean; title: string } {
+  const short = side === 'SELL';
+  const base = short ? 'VWAP X↓' : 'VWAP X';
+  if (!v) return { label: base, enabled: false, title: `${base}: no state yet` };
+  const label = !v.available && v.closesInSec > 0 ? `${base} · ${v.closesInSec}s` : base;
+  if (!v.available) return { label, enabled: false, title: v.reason || (short ? 'no VWAP bear cross' : 'no VWAP bull cross') };
+  const lv = vwapxLevels(v);
+  if (!connected) return { label, enabled: false, title: `not connected to TWS · ${lv}` };
+  if (!canSize) return { label, enabled: false, title: `pick a risk or enter shares · ${lv}` };
+  if (short) {
+    const bw = v.borrow === 'unknown' ? ' · borrow unknown' : '';
+    return { label, enabled: !busy, title: `${lv}${bw} · SELL SHORT LMT at the current price + real IB buy stop at the VWAP + 3R TP; Confirm next` };
+  }
+  return { label, enabled: !busy, title: `${lv} · BUY LMT at the current price + real IB stop at the VWAP + 3R TP; Confirm next` };
+}
+
+/** "entry 27.99 · stop 27.80 · TP 28.27 · cross 14:01" (ET). */
+export function vwapxLevels(v: Pick<OTVwapx, 'entry' | 'stop' | 'tp' | 'crossMs'>): string {
+  return `entry ${fmtPx(v.entry)} · stop ${fmtPx(v.stop)} · TP ${fmtPx(v.tp)} · cross ${etTime(v.crossMs)}`;
+}
+
+/** The muted line under the quote pills while VWAP X is available ('' otherwise). */
+export function vwapxLine(v: OTVwapx | null | undefined): string {
+  if (!v || !v.available) return '';
+  const short = v.side === 'SELL';
+  const pct = (short && v.stopPct > 0 ? '+' : '') + v.stopPct.toFixed(2).replace('-', '−');
+  const bw = short && v.borrow === 'unknown' ? ' · borrow unknown' : '';
+  return `${short ? 'VWAP X↓' : 'VWAP X'} ${etTime(v.crossMs)} · entry ${fmtPx(v.entry)} · stop ${fmtPx(v.stop)} (${pct}%) · TP ${fmtPx(v.tp)}${bw}`;
+}
+
+export interface VwapxSizing {
+  qty: number;
+  /** qty x entry. */
+  positionUsd: number;
+  /** What is actually at stake if the stop fills: qty x per-share risk. */
+  riskUsd: number;
+  /** Per-share risk |entry - stop|. */
+  perShare: number;
+  /** Stop distance in percent of entry (unsigned). */
+  stopPct: number;
+  /** Take-profit distance in percent of entry (unsigned). */
+  tpPct: number;
+  /** Reward / risk: |tp - entry| / per-share risk (0 when there is no TP). */
+  rr: number;
+  /** True when the max position trimmed the risk-based size. */
+  capped: boolean;
+  /** True when typed shares x entry is above the max position (the server refuses it). */
+  overMax: boolean;
+  /** The typed Shares value is in use (risk is then only what those shares would lose). */
+  typed: boolean;
+}
+
+/**
+ * What a VWAP X press would size to, mirroring the server's riskSize / prepareVwapxPending:
+ * typed shares win (refused above max position), else floor(risk / per-share) trimmed to
+ * floor(max / entry). Null when the levels are unusable or nothing can size it.
+ */
+export function vwapxSizing(v: OTVwapx | null | undefined, riskUsd: number, sharesOverride: number, maxPositionUSD: number): VwapxSizing | null {
+  if (!v || !v.available) return null;
+  const per = Math.abs(v.entry - v.stop);
+  if (!(v.entry > 0) || !(per > 0) || !Number.isFinite(per)) return null;
+  const typed = sharesOverride > 0;
+  let qty = 0;
+  let capped = false;
+  let overMax = false;
+  if (typed) {
+    qty = Math.floor(sharesOverride);
+    overMax = qty * v.entry > maxPositionUSD + 1e-9;
+  } else if (riskUsd > 0) {
+    qty = Math.floor(riskUsd / (per + COMMISSION_PER_SHARE) + 1e-9);
+    const capQ = Math.floor(maxPositionUSD / v.entry + 1e-9);
+    if (qty > capQ) {
+      qty = capQ;
+      capped = true;
+    }
+  }
+  if (!(qty > 0) || !Number.isFinite(qty)) return null;
+  const tpDist = v.tp > 0 ? Math.abs(v.tp - v.entry) : 0;
+  return {
+    qty,
+    positionUsd: qty * v.entry,
+    riskUsd: qty * per,
+    perShare: per,
+    stopPct: (per / v.entry) * 100,
+    tpPct: (tpDist / v.entry) * 100,
+    rr: tpDist / per,
+    capped,
+    overMax,
+    typed,
+  };
+}
+
+/** The compact sizing line under VWAP X: text + tone ('' | 'warn' | 'over'); null shows nothing. */
+export function vwapxSizingLine(z: VwapxSizing | null, riskWanted: number, maxPositionUSD: number): { text: string; cls: '' | 'warn' | 'over' } | null {
+  if (!z) return null;
+  const money = (v: number) => fmtMoney(Math.round(v), 'USD'); // round (fmtMoney floors, which shows $49 for 49.9999)
+  const base = `${z.qty.toLocaleString('en-US')} sh · ${money(z.positionUsd)}`;
+  const tail = `stop ${z.stopPct.toFixed(2)}% · TP ${z.tpPct.toFixed(2)}% = ${z.rr.toFixed(1)}R`;
+  if (z.overMax) return { text: `${base} · over max ${money(maxPositionUSD)} - refused`, cls: 'over' };
+  if (z.capped) return { text: `${base} · capped by max ${money(maxPositionUSD)} · real risk ${money(z.riskUsd)} of ${money(riskWanted)} · ${tail}`, cls: 'warn' };
+  return { text: `${base} · risk ${money(z.riskUsd)} · ${tail}`, cls: z.rr < 1 ? 'warn' : '' };
+}
+
 /** The prepare payload: the chosen TP percent rides along with side and size. */
 export function prepareBody(side: 'BUY' | 'SELL', positionUSD: number, shares: number, sym: string, tpPct: number, stopOn = true, riskUsd = 0) {
   return { side, positionUSD, shares, sym, tpPct, stopOn, riskUsd };
 }
 
 /** The order row's soft-stop text: "SL 2.41 (soft) armed", "... off", exit fill progress. */
-export function stopText(o: Pick<OTOrder, 'stopLabel' | 'stopState' | 'stopOn' | 'exitQty' | 'exitFilled'>): string {
+export function stopText(o: Pick<OTOrder, 'stopLabel' | 'stopState' | 'stopOn' | 'exitQty' | 'exitFilled'> & Partial<Pick<OTOrder, 'kind' | 'slStatus'>>): string {
+  // a VWAP X order's stop is a real IB order: show its own status like the TP child
+  if (o.kind === 'vwapx') return o.stopLabel ? `${o.stopLabel}${o.slStatus ? ` ${o.slStatus}` : ''}` : '';
   if (!o.stopLabel) return o.stopOn === false ? 'SL off' : '';
   if (o.stopOn === false) return `${o.stopLabel} off`;
   if (o.stopState === 'exiting') return `${o.stopLabel} exiting ${o.exitFilled ?? 0}/${o.exitQty ?? 0}`;
@@ -198,8 +322,8 @@ export function stopText(o: Pick<OTOrder, 'stopLabel' | 'stopState' | 'stopOn' |
 }
 
 /** Whether the per-order stop toggle can be used (not once the stop fired). */
-export function stopToggleable(o: Pick<OTOrder, 'stopState' | 'active'>): boolean {
-  return o.active && o.stopState !== 'triggered' && o.stopState !== 'exiting';
+export function stopToggleable(o: Pick<OTOrder, 'stopState' | 'active'> & Partial<Pick<OTOrder, 'kind'>>): boolean {
+  return o.kind !== 'vwapx' && o.active && o.stopState !== 'triggered' && o.stopState !== 'exiting';
 }
 
 export const SL_KEY = 'orderTicket.stopOn';
@@ -458,11 +582,14 @@ export function shortTile(si: OTShort | null | undefined, qty: number): StatTile
   };
 }
 
-export type PresetName = 'custom' | 'power';
+/** Estimated round-trip commission per share (Go: commissionPerShare). */
+export const COMMISSION_PER_SHARE = 0.006;
+
+export type PresetName = 'custom' | 'power' | 'newsflag';
 
 /** The active preset for the next orders (default Custom). */
 export function activePreset(s: Pick<OTSettings, 'preset'>): PresetName {
-  return s.preset === 'power' ? 'power' : 'custom';
+  return s.preset === 'power' || s.preset === 'newsflag' ? s.preset : 'custom';
 }
 
 /**

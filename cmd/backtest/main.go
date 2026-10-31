@@ -78,6 +78,17 @@ func realMain(args []string, stdout, stderr io.Writer) int {
 	asof := fs.String("asof", "", "the date the feed's bars are adjusted to, YYYY-MM-DD (default: today, ET): splits executed up to it are undone. Pin it to the original run's date when rerunning from the cache with -dry")
 	resamples := fs.Int("resamples", 10000, "bootstrap resamples")
 	seed := fs.Uint64("seed", 20261006, "bootstrap seed")
+	strategy := fs.String("strategy", "flag", "flag (the 9EMA-flag trader, default) or vwapcross (the Bull VWAP Cross, internal/backtest/vwapcross.go)")
+	from := fs.String("from", "", "vwapcross only: first test day YYYY-MM-DD (default: -days trading days ending -end); with -from the test days are every trading day from..-end")
+	plan := fs.Bool("plan", false, "vwapcross only: fetch/read the grouped daily bars and the splits, print how many names per day pass the prefilter (= minute-bar calls), then stop without fetching minute bars")
+	grid := fs.Bool("grid", false, "vwapcross only: evaluate the pre-registered rule grid (grid v1: exits, stops, filters, the VWAP X order) in one pass and write grid.md, grid.csv and grid.json into -out")
+	drift := fs.Bool("drift", false, "vwapcross only (implies -strategy vwapcross): DIAGNOSTIC forward-return study of every signal (intrabar, close, 5m) with context features, no stops; writes drift.md and drift.csv into -out")
+	grid2 := fs.Bool("grid2", false, "vwapcross only: evaluate the pre-registered grid v2 (VWAP reclaim: hold/time exits, day-low and ATR stops, context gates, portfolio limits) with the market benchmark; writes grid2.md/csv/json and per-trade CSVs of D5 and P1 into -out")
+	grid3 := fs.Bool("grid3", false, "vwapcross only: evaluate the pre-registered grid v3 (first-cross/trend5/AVOID/portfolio variants V0-V7) with the market benchmark; writes grid3.md/csv/json into -out")
+	grid3both := fs.String("grid3both", "", "comma-separated run dirs holding grid3.json: write the combined grid3_both.md (per-month and worse-month rows) into -out and stop (no data access)")
+	drift2 := fs.Bool("drift2", false, "vwapcross only (implies -drift with -bench SPY unless -bench is given): the drift study plus market-regime features (SPY day%, SPY vs its VWAP, SPY 30-minute change, relative strength) and a per-calendar-month consistency check; also writes drift2.md and drift2.csv into -out")
+	bench := fs.String("bench", "SPY", "vwapcross only: benchmark symbol for the excess-return columns of -grid2 and -drift (its minute bars are fetched for every test day; \"\" = none). -drift uses it only when -bench is given explicitly")
+	benchOnly := fs.Bool("benchonly", false, "vwapcross only: fetch/read just the -bench symbol's minute bars for the test days (plus the grouped days that name them) and stop; the minimal download for the benchmark")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -125,13 +136,89 @@ func realMain(args []string, stdout, stderr io.Writer) int {
 	if v := strings.TrimSpace(*variants); v != "" && !strings.EqualFold(v, "all") {
 		names = strings.Split(v, ",")
 	}
-	if _, err := pickVariants(names); err != nil {
-		return usage("%v", err)
+	if *grid {
+		explicit := false
+		fs.Visit(func(f *flag.Flag) {
+			if f.Name == "strategy" {
+				explicit = true
+			}
+		})
+		if explicit && *strategy != "vwapcross" {
+			return usage("-grid is for -strategy vwapcross")
+		}
+		*strategy = "vwapcross"
 	}
+	if *grid2 || *grid3 || *benchOnly {
+		explicit := false
+		fs.Visit(func(f *flag.Flag) {
+			if f.Name == "strategy" {
+				explicit = true
+			}
+		})
+		if explicit && *strategy != "vwapcross" {
+			return usage("-grid2 and -benchonly are for -strategy vwapcross")
+		}
+		if n := btoi(*grid) + btoi(*drift) + btoi(*grid2) + btoi(*grid3) + btoi(*benchOnly); n > 1 {
+			return usage("-grid, -grid2, -grid3, -drift and -benchonly are separate modes")
+		}
+		*strategy = "vwapcross"
+	}
+	if *drift2 {
+		*drift = true
+	}
+	if *drift {
+		if *grid {
+			return usage("-drift and -grid are separate modes")
+		}
+		fs.Visit(func(f *flag.Flag) {
+			if f.Name == "strategy" && *strategy != "vwapcross" {
+				*strategy = "?"
+			}
+		})
+		if *strategy == "?" {
+			return usage("-drift is for -strategy vwapcross")
+		}
+		*strategy = "vwapcross"
+	}
+	if *strategy != "flag" && *strategy != "vwapcross" {
+		return usage("-strategy must be flag or vwapcross")
+	}
+	if *strategy == "flag" {
+		if _, err := pickVariants(names); err != nil {
+			return usage("%v", err)
+		}
+		if *from != "" || *plan {
+			return usage("-from and -plan are for -strategy vwapcross")
+		}
+	}
+	if *from != "" {
+		if _, err := time.Parse("2006-01-02", *from); err != nil {
+			return usage("-from must be YYYY-MM-DD")
+		}
+		if *from > *end {
+			return usage("-from %s is after -end %s", *from, *end)
+		}
+	}
+	maxcandSet := false
+	fs.Visit(func(fl *flag.Flag) {
+		if fl.Name == "maxcand" {
+			maxcandSet = true
+		}
+	})
 	for _, p := range []struct{ flag, path string }{{"-cache", *cacheDir}, {"-out", *outDir}} {
 		if underDir(p.path, config.ConfigDir()) {
 			return usage("%s %q is inside %s: the backtest never writes there", p.flag, p.path, config.ConfigDir())
 		}
+	}
+
+	if *grid3both != "" {
+		p, err := backtest.WriteGrid3Both(*outDir, strings.Split(*grid3both, ","))
+		if err != nil {
+			fmt.Fprintf(stderr, "backtest: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, p)
+		return 0
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -158,6 +245,33 @@ func realMain(args []string, stdout, stderr io.Writer) int {
 	}
 
 	cmdline := "backtest " + strings.Join(args, " ")
+	// -drift keeps its report byte-identical unless -bench is given explicitly; -grid2 and -benchonly always use it.
+	benchSym := *bench
+	benchSet := false
+	fs.Visit(func(fl *flag.Flag) {
+		if fl.Name == "bench" {
+			benchSet = true
+		}
+	})
+	if *drift && !benchSet {
+		benchSym = ""
+		if *drift2 {
+			benchSym = "SPY"
+		}
+	}
+	if *drift2 && benchSym == "" {
+		return usage("-drift2 needs a benchmark (-bench SPY)")
+	}
+	if *strategy == "vwapcross" {
+		mc := *maxcand
+		if !maxcandSet {
+			mc = 100000
+		}
+		return runVwapcross(ctx, f, vwOptions{
+			Days: *days, HistDays: *hist, End: *end, From: *from, AsOf: *asof, SkipSplits: !*splits, Variants: names, MaxCand: mc,
+			Resamples: *resamples, Seed: *seed, Plan: *plan, Grid: *grid, Drift: *drift, Drift2: *drift2, Grid2: *grid2, Grid3: *grid3, BenchOnly: *benchOnly, Bench: benchSym, GeneratedAt: time.Now().Format("2006-01-02 15:04 MST"), Command: cmdline,
+		}, *outDir, stdout, stderr)
+	}
 	rep, results, err := run(ctx, f, options{
 		Days: *days, HistDays: *hist, End: *end, AsOf: *asof, SkipSplits: !*splits, Variants: names, MaxCand: *maxcand,
 		Resamples: *resamples, Seed: *seed, GeneratedAt: time.Now().Format("2006-01-02 15:04 MST"), Command: cmdline,
@@ -175,6 +289,13 @@ func realMain(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintln(stdout, "files:")
 	for _, p := range paths {
 		fmt.Fprintln(stdout, "  "+p)
+	}
+	return 0
+}
+
+func btoi(b bool) int {
+	if b {
+		return 1
 	}
 	return 0
 }

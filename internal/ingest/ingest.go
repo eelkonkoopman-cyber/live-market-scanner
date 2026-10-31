@@ -6,6 +6,7 @@ package ingest
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -46,6 +47,18 @@ type Ingest struct {
 	flagOut   chan core.Agg
 	flagDrops atomic.Int64
 
+	// Order-ticket tap: LOSSLESS, unlike the chart tap. The soft stop reads
+	// its prices here, so a full channel must never drop one: every aggregate
+	// of a ticket symbol is queued per symbol (bounded; on overflow the newest
+	// is merged into the last queued one - high/low/close/volume kept) and a
+	// 1-slot notify channel wakes the single consumer, which drains them all.
+	ticketSyms atomic.Pointer[map[string]struct{}]
+	tkMu       sync.Mutex
+	tkPend     map[string][]core.Agg
+	tkOrder    []string // symbols in first-arrival order since the last drain
+	tkNote     chan struct{}
+	tkMerged   atomic.Int64
+
 	// onConnect (optional) runs after each (re)connect's re-seed: cmd/scanner
 	// wires prefill.Worker.Reseed, which re-seeds session VWAPs from REST bars.
 	onConnect atomic.Pointer[func()]
@@ -67,6 +80,8 @@ func New(feed core.FeedClient, eng core.Engine, uni *universe.Universe) *Ingest 
 		feed: feed, eng: eng, uni: uni,
 		chartOut: make(chan core.Agg, 512),
 		flagOut:  make(chan core.Agg, flagOutBuf),
+		tkPend:   map[string][]core.Agg{},
+		tkNote:   make(chan struct{}, 1),
 	}
 }
 
@@ -85,6 +100,66 @@ func symSet(syms []string) *map[string]struct{} {
 // disables it). Holds no per-symbol state (unlike the tape engine), so this is
 // a plain atomic replace, not a reconcile — the tap has nothing to preserve.
 func (i *Ingest) SetChartSyms(syms []string) { i.chartSyms.Store(symSet(syms)) }
+
+// tkMaxPerSym bounds one symbol's undrained queue (~4 min of seconds).
+const tkMaxPerSym = 256
+
+// SetTicketSyms points the lossless order-ticket tap at exactly this set.
+func (i *Ingest) SetTicketSyms(syms []string) { i.ticketSyms.Store(symSet(syms)) }
+
+// TicketNotify fires (coalesced) when ticket aggregates are waiting.
+func (i *Ingest) TicketNotify() <-chan struct{} { return i.tkNote }
+
+// DrainTicket returns every queued ticket aggregate (per symbol in arrival
+// order) and empties the queue.
+func (i *Ingest) DrainTicket() []core.Agg {
+	i.tkMu.Lock()
+	defer i.tkMu.Unlock()
+	var out []core.Agg
+	for _, s := range i.tkOrder {
+		out = append(out, i.tkPend[s]...)
+		delete(i.tkPend, s)
+	}
+	i.tkOrder = i.tkOrder[:0]
+	return out
+}
+
+// TicketMerged counts aggregates merged (not lost) because a queue was full.
+func (i *Ingest) TicketMerged() int64 { return i.tkMerged.Load() }
+
+func (i *Ingest) teeTicket(a core.Agg) {
+	p := i.ticketSyms.Load()
+	if p == nil {
+		return
+	}
+	if _, ok := (*p)[a.Sym]; !ok {
+		return
+	}
+	i.tkMu.Lock()
+	q, had := i.tkPend[a.Sym]
+	if !had {
+		i.tkOrder = append(i.tkOrder, a.Sym)
+	}
+	if len(q) >= tkMaxPerSym {
+		m := &q[len(q)-1]
+		if a.High > m.High {
+			m.High = a.High
+		}
+		if a.Low > 0 && (m.Low <= 0 || a.Low < m.Low) {
+			m.Low = a.Low
+		}
+		m.Close, m.Vol, m.DayVWAP, m.AccVol, m.EndMs = a.Close, m.Vol+a.Vol, a.DayVWAP, a.AccVol, a.EndMs
+		i.tkMerged.Add(1)
+	} else {
+		q = append(q, a)
+	}
+	i.tkPend[a.Sym] = q
+	i.tkMu.Unlock()
+	select {
+	case i.tkNote <- struct{}{}:
+	default: // a wake-up is already pending; it drains this one too
+	}
+}
 
 // ChartAggs streams per-second aggregates for the selected symbol.
 func (i *Ingest) ChartAggs() <-chan core.Agg { return i.chartOut }
@@ -155,6 +230,7 @@ func (i *Ingest) pump(ctx context.Context, out <-chan core.Agg) {
 		case <-ctx.Done():
 			return
 		case a := <-out:
+			i.teeTicket(a) // first: the soft stop's lossless feed
 			// Tee to any live charts before the universe filter, so a selected
 			// symbol keeps streaming even if the universe hasn't loaded yet.
 			if p := i.chartSyms.Load(); p != nil {

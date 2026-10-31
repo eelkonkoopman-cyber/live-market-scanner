@@ -31,7 +31,9 @@ func (w *wrapper) AccountSummary(reqID int64, account, tag, value, currency stri
 	w.t.onAccountSummary(w.gen, reqID, account, tag, value, currency)
 }
 func (w *wrapper) AccountSummaryEnd(int64)         {}
-func (w *wrapper) TickPrice(int64, int64, float64) {}
+func (w *wrapper) TickPrice(reqID, tickType int64, price float64) {
+	w.t.onTickPrice(w.gen, reqID, tickType, price)
+}
 func (w *wrapper) TickSize(reqID, tickType int64, size float64) {
 	w.t.onTick(w.gen, reqID, tickType, size)
 }

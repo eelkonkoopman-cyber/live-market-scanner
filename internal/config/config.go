@@ -116,6 +116,22 @@ func RTPRToken() string {
 	return readSecretFile("rtprtoken", "rtprtoken.txt")
 }
 
+// NewsfilterToken returns the API key for Newsfilter (newsfilter.io), which the
+// scanner only RECORDS (internal/newsfilter) so its delivery times can be
+// compared with RTPR's. SCANNER_NEWSFILTER=0 is an explicit off switch and is
+// checked first, so a preview or test environment can never open a stream on
+// the key even when the token file exists; then SCANNER_NEWSFILTER_TOKEN, then
+// ~/.marketscanner/newsfiltertoken. Empty = the recorder is not started.
+func NewsfilterToken() string {
+	if strings.TrimSpace(os.Getenv("SCANNER_NEWSFILTER")) == "0" {
+		return ""
+	}
+	if t := strings.TrimSpace(os.Getenv("SCANNER_NEWSFILTER_TOKEN")); t != "" {
+		return t
+	}
+	return readSecretFile("newsfiltertoken", "newsfiltertoken.txt")
+}
+
 func readSecretFile(names ...string) string {
 	for _, name := range names {
 		if b, err := os.ReadFile(filepath.Join(ConfigDir(), name)); err == nil {

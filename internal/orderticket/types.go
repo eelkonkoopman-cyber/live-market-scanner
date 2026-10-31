@@ -30,8 +30,10 @@ type Order struct {
 	OrderType     string
 	TotalQuantity Qty
 	LmtPrice      float64
+	AuxPrice      float64 // STP trigger price (0 = unset); sent only by the VWAP X stop child
 	TIF           string
 	OcaGroup      string
+	OcaType       int64 // 1 = cancel the rest of the group on a fill (with block)
 	Account       string
 	OrderRef      string
 	Transmit      bool

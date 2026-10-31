@@ -64,7 +64,7 @@ export const DEFAULT_SETUP: SetupKind = 'flag';
 export type ViewEvent = FlagEvent | SignalEvent | DildoEvent | ClimaxEvent | BbsEvent | IgnitionEvent;
 
 // The dildo and climax kinds: drawn and listed, never sounded or spoken by the cell.
-const ALERT_RULE_KINDS: ReadonlySet<string> = new Set(['dildo', 'dildoPb', 'dildoCancel', 'climax', 'bottom', 'climaxFail', 'bbs', 'ignition', 'power', 'powerSetup', 'vwapBull', 'vwapBear']);
+const ALERT_RULE_KINDS: ReadonlySet<string> = new Set(['dildo', 'dildoPb', 'dildoCancel', 'climax', 'bottom', 'climaxFail', 'bbs', 'ignition', 'power', 'powerSetup', 'vwapBull', 'vwapBear', 'vwapEarlyUp', 'vwapEarlyDn']);
 
 /**
  * A flag cell's event list with the dildo and climax rules' events merged in:

@@ -81,3 +81,40 @@ func TestLatestPowerSetup(t *testing.T) {
 		t.Fatal("other symbol")
 	}
 }
+
+func TestLatestVwapBull(t *testing.T) {
+	c := etMs(2026, 10, 29, 10, 1)
+	r := New(newFakeRepo(), func() time.Time { return time.UnixMilli(c + 5*60_000) })
+	if _, ok := r.LatestVwapBull("MGM"); ok {
+		t.Fatal("none yet")
+	}
+	r.OnSignal(core.SignalHit{Sym: "MGM", Kind: core.KindEmaVwapBull, BarMs: c, Price: 27.99, Ema: 27.9, Vwap: 27.8, Dist: 0.3})
+	r.OnSignal(core.SignalHit{Sym: "MGM", Kind: core.KindEmaVwapBull, BarMs: c + 120_000, Price: 28.1, Ema: 28.0, Vwap: 27.9, Dist: 0.3})
+	r.OnSignal(core.SignalHit{Sym: "MGM", Kind: core.KindEmaVwapBear, BarMs: c + 180_000, Price: 27.0})
+	if bar, ok := r.LatestVwapBull("MGM"); !ok || bar != c+120_000 {
+		t.Fatalf("latest bull %v %v", bar, ok)
+	}
+	if _, ok := r.LatestVwapBull("XYZ"); ok {
+		t.Fatal("other symbol")
+	}
+}
+
+func TestLatestVwapBear(t *testing.T) {
+	c := etMs(2026, 10, 29, 10, 1)
+	r := New(newFakeRepo(), func() time.Time { return time.UnixMilli(c + 5*60_000) })
+	if _, ok := r.LatestVwapBear("MGM"); ok {
+		t.Fatal("none yet")
+	}
+	r.OnSignal(core.SignalHit{Sym: "MGM", Kind: core.KindEmaVwapBear, BarMs: c, Price: 27.0})
+	r.OnSignal(core.SignalHit{Sym: "MGM", Kind: core.KindEmaVwapBear, BarMs: c + 60_000, Price: 26.9})
+	r.OnSignal(core.SignalHit{Sym: "MGM", Kind: core.KindEmaVwapBull, BarMs: c + 180_000, Price: 27.99, Ema: 27.9, Vwap: 27.8, Dist: 0.3})
+	if bar, ok := r.LatestVwapBear("MGM"); !ok || bar != c+60_000 {
+		t.Fatalf("latest bear %v %v", bar, ok)
+	}
+	if bar, ok := r.LatestVwapBull("MGM"); !ok || bar != c+180_000 {
+		t.Fatalf("bull must be unchanged %v %v", bar, ok)
+	}
+	if _, ok := r.LatestVwapBear("XYZ"); ok {
+		t.Fatal("other symbol")
+	}
+}

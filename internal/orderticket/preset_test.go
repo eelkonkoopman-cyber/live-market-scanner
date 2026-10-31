@@ -92,14 +92,14 @@ func TestTPForRMath(t *testing.T) {
 	r := powerRig(t, nil)
 	pid, cid, q := placePower(t, r)
 	r.f.w.OrderStatus(pid, "Submitted", 100, Qty(q-100), 1.49, 9100, 0, 1.49, 80, "", 0)
-	// stop at fill: EMA 1.50 x 0.94 = 1.41 (< fill) -> TP = 1.49 + 3 x 0.08 = 1.73
+	// stop at fill: from min(EMA 1.50, fill 1.49) x 0.94 = 1.40 -> TP = 1.49 + 3 x 0.09 = 1.76
 	var tp []placed
 	for _, x := range r.f.placesCopy()[2:] {
 		if x.id == cid {
 			tp = append(tp, x)
 		}
 	}
-	if len(tp) != 1 || !near(tp[0].o.LmtPrice, 1.73) {
+	if len(tp) != 1 || !near(tp[0].o.LmtPrice, 1.76) {
 		t.Fatalf("TP re-price %+v", tp)
 	}
 }
@@ -256,5 +256,20 @@ func TestStatePsGrade(t *testing.T) {
 	grades["SGRX"] = false
 	if g := r.tk.State().PsGrade; g == nil || g.Aplus || g.Mult != 1 || g.BaseRange != 0 {
 		t.Fatalf("plain grade %+v", g)
+	}
+}
+
+func TestNewsFlagPreset(t *testing.T) {
+	tk := &Ticket{}
+	tk.settings.Preset = presetNews
+	p := Pending{Side: "BUY", Limit: 2, TPPct: 5}
+	tk.applyPresetLocked(&p, 2)
+	if p.Preset != presetNews || !p.Trail5m || p.TPPct != nfTPPct || p.TP != 3 {
+		t.Fatalf("pending %+v", p)
+	}
+	o := &ord{}
+	tk.presetToOrderLocked(o, &p, time.Now())
+	if !o.Trail5m || !o.BEOff || presetLabel(o) != "News Flag · 5m trail" {
+		t.Fatalf("order %+v label %q", o, presetLabel(o))
 	}
 }

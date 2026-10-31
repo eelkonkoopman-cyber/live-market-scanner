@@ -111,6 +111,13 @@ func (r *Recorder) signalText(h core.SignalHit) (label, note string, ok bool) {
 		return volbreak.LabelBreak, "volume break " + fmtPx(h.Level) + " (" + toFixed(h.VolX, 1) + "x vol), 9EMA " + fmtPxOrQ(h.Ema) + ", " + fmtDvol(h.DollarVol), true
 	case volbreak.KindEntry:
 		return volbreak.LabelEntry, "vol break 9EMA entry " + fmtPx(h.Price) + ", level " + fmtPx(h.Level) + "; broke at " + r.clock(h.ClimaxMs), true
+	case core.KindEmaVwapEarlyUp, core.KindEmaVwapEarlyDn:
+		label = core.LabelEmaVwapEarlyUp
+		dir := "above"
+		if h.Kind == core.KindEmaVwapEarlyDn {
+			label, dir = core.LabelEmaVwapEarlyDn, "under"
+		}
+		return label, "price " + fmtPx(h.Price) + " " + dir + " the VWAP " + fmtPx(h.Vwap) + ", 9 EMA " + toFixed(math.Abs(h.Dist), 2) + "% from crossing", true
 	case core.KindEmaVwapBull, core.KindEmaVwapBear:
 		label = core.LabelEmaVwapBull
 		dir := "above"
@@ -219,4 +226,33 @@ func (r *Recorder) LatestPowerSetup(sym string) (aplus bool, baseRange float64, 
 		return aplus, baseRange, e.Ts, true
 	}
 	return false, 0, 0, false
+}
+
+// LatestVwapBull reads sym's newest 9EMA VWAP bull cross recorded today: the
+// firing 1-minute bar's START ms (FlagEvent.Ts = SignalHit.BarMs). Read-only;
+// the order ticket's "VWAP X" preset uses it. ok = a bull cross today.
+func (r *Recorder) LatestVwapBull(sym string) (barMs int64, ok bool) {
+	return r.latestVwapCross(sym, core.KindEmaVwapBull)
+}
+
+// LatestVwapBear is LatestVwapBull for the bear (short) cross: the order
+// ticket's "VWAP X down" preset.
+func (r *Recorder) LatestVwapBear(sym string) (barMs int64, ok bool) {
+	return r.latestVwapCross(sym, core.KindEmaVwapBear)
+}
+
+func (r *Recorder) latestVwapCross(sym, kind string) (barMs int64, ok bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.rollTo(r.now().UnixMilli())
+	for i := range r.events {
+		e := &r.events[i]
+		if e.Sym != sym || e.Kind != kind {
+			continue
+		}
+		if !ok || e.Ts > barMs {
+			barMs, ok = e.Ts, true
+		}
+	}
+	return barMs, ok
 }

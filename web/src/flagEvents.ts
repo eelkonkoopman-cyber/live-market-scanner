@@ -36,6 +36,8 @@ const BADGES: Record<FlagEventKind, { text: string; tone: FlagEventTone }> = {
   volBreakEntry: { text: 'VB 9EMA', tone: 'pos' },
   vwapBull: { text: 'VWAP+', tone: 'pos' },
   vwapBear: { text: 'VWAP−', tone: 'neg' },
+  vwapEarlyUp: { text: 'VWAP+ early', tone: 'info' },
+  vwapEarlyDn: { text: 'VWAP− early', tone: 'info' },
 };
 
 export function kindBadge(kind: FlagEventKind): { text: string; tone: FlagEventTone } {

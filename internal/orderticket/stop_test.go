@@ -366,3 +366,16 @@ func TestStopNeverOversellsRandom(t *testing.T) {
 		r.tk.Disconnect()
 	}
 }
+
+// A fill through the 9EMA measures the stop from the fill, never closer than pct.
+func TestStopFromLowerOfEmaAndFill(t *testing.T) {
+	if got := stopLevelFor("BUY", 3.52, 3.38, 5); !near(got, 3.21) {
+		t.Fatalf("long below EMA %v", got)
+	}
+	if got := stopLevelFor("BUY", 3.30, 3.38, 5); !near(got, 3.13) {
+		t.Fatalf("long above EMA %v", got)
+	}
+	if got := stopLevelFor("SELL", 3.20, 3.38, 5); !near(got, 3.55) {
+		t.Fatalf("short above EMA %v", got)
+	}
+}

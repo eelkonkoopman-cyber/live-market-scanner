@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { accountBadge, act, availLabel, connLabel, fmtPx, fmtUsd, marginView, parseShares, activePreset, presetBody, shortTile, fmtCompact, statTiles, type OTPreviewSide, breakeven, breakevenBody, dropCancel, dropCancelBody, followText, parseFollowSec, parseRiskChoice, riskFor, riskPctFor, riskView, pctRiskUsd, baseRiskUsd, riskLabel, powerRiskChoice, sizingLine, emaPill, emaAge, emaUsable, fmtMoney, parseStopOn, parseStopPct, actionState, stopText, stopToggleable, parseTpChoice, prepareBody, previewLine, tpPctFor, previewQty, ticketQty, type OTMargin } from './orderTicket';
+import { vwapxSizing, vwapxSizingLine, accountBadge, act, availLabel, connLabel, fmtPx, fmtUsd, marginView, parseShares, activePreset, presetBody, shortTile, fmtCompact, statTiles, type OTPreviewSide, breakeven, breakevenBody, dropCancel, dropCancelBody, followText, parseFollowSec, parseRiskChoice, riskFor, riskPctFor, riskView, pctRiskUsd, baseRiskUsd, riskLabel, powerRiskChoice, sizingLine, emaPill, emaAge, emaUsable, fmtMoney, parseStopOn, parseStopPct, actionState, stopText, stopToggleable, parseTpChoice, prepareBody, previewLine, tpPctFor, previewQty, ticketQty, vwapxBody, vwapxButton, vwapxLine, vwapxLevels, type OTVwapx, type OTMargin } from './orderTicket';
 
 describe('order ticket helpers', () => {
   it('formats prices on the US-equity tick', () => {
@@ -401,5 +401,115 @@ describe('percent risk', () => {
     expect(tiles.find((t) => t.key === 'risk')!.value).toBe('$105');
     const d = statTiles({ sym: 'X', sizing: null, preview: null } as never, { sharesOverride: false, slOn: true, riskUsd: 50 });
     expect(d.find((t) => t.key === 'risk')!.value).toBe('$50');
+  });
+});
+
+describe('VWAP X', () => {
+  // 2026-10-29 14:01 ET = 18:01 UTC
+  const crossMs = Date.UTC(2026, 9, 29, 18, 1);
+  const ok: OTVwapx = { available: true, reason: '', crossMs, closesInSec: 0, entry: 27.99, stop: 27.8, tp: 28.27, ageSec: 150, stopPct: -0.678813 };
+  it('builds the prepare body: BUY only, kind vwapx, size from shares or risk', () => {
+    expect(vwapxBody(120, 'MGM')).toEqual({ side: 'BUY', kind: 'vwapx', positionUSD: 0, shares: 120, sym: 'MGM', riskUsd: 0 });
+    expect(vwapxBody(0, 'MGM', 50)).toMatchObject({ shares: 0, riskUsd: 50, kind: 'vwapx' });
+  });
+  it('titles the levels in ET and shows the muted line', () => {
+    expect(vwapxLevels(ok)).toBe('entry 27.99 · stop 27.80 · TP 28.27 · cross 14:01');
+    expect(vwapxLine(ok)).toBe('VWAP X 14:01 · entry 27.99 · stop 27.80 (−0.68%) · TP 28.27');
+    expect(vwapxLine({ ...ok, available: false })).toBe('');
+    expect(vwapxLine(null)).toBe('');
+  });
+  it('enables only when available, connected and sized', () => {
+    expect(vwapxButton(ok, true, true, false)).toMatchObject({ label: 'VWAP X', enabled: true });
+    expect(vwapxButton(ok, true, true, false).title).toContain('entry 27.99 · stop 27.80 · TP 28.27 · cross 14:01');
+    expect(vwapxButton(ok, false, true, false)).toMatchObject({ enabled: false });
+    expect(vwapxButton(ok, false, true, false).title).toContain('pick a risk or enter shares');
+    expect(vwapxButton(ok, true, false, false).enabled).toBe(false);
+    expect(vwapxButton(ok, true, true, true).enabled).toBe(false);
+    expect(vwapxButton(undefined, true, true, false).enabled).toBe(false);
+  });
+  it('counts down while the cross candle forms, else shows the reason', () => {
+    const forming: OTVwapx = { ...ok, available: false, reason: 'cross candle closes in 23s', closesInSec: 23, entry: 0, stop: 0, tp: 0 };
+    expect(vwapxButton(forming, true, true, false)).toEqual({ label: 'VWAP X · 23s', enabled: false, title: 'cross candle closes in 23s' });
+    const old: OTVwapx = { ...ok, available: false, reason: 'cross is 15m old', closesInSec: 0 };
+    expect(vwapxButton(old, true, true, false)).toEqual({ label: 'VWAP X', enabled: false, title: 'cross is 15m old' });
+  });
+  it('VWAP X down: SELL body, short levels line with the borrow note, ↓ button label', () => {
+    const bear: OTVwapx = { available: true, reason: '', crossMs, closesInSec: 0, entry: 27.99, stop: 28.21, tp: 27.71, ageSec: 150, stopPct: 0.785995, side: 'SELL', borrow: 'unknown' };
+    expect(vwapxBody(120, 'MGM', 0, 'SELL')).toEqual({ side: 'SELL', kind: 'vwapx', positionUSD: 0, shares: 120, sym: 'MGM', riskUsd: 0 });
+    expect(vwapxBody(120, 'MGM')).toMatchObject({ side: 'BUY' });
+    expect(vwapxLine(bear)).toBe('VWAP X↓ 14:01 · entry 27.99 · stop 28.21 (+0.79%) · TP 27.71 · borrow unknown');
+    expect(vwapxLine({ ...bear, borrow: 'ok' })).toBe('VWAP X↓ 14:01 · entry 27.99 · stop 28.21 (+0.79%) · TP 27.71');
+    expect(vwapxButton(bear, true, true, false, 'SELL')).toMatchObject({ label: 'VWAP X↓', enabled: true });
+    expect(vwapxButton(bear, true, true, false, 'SELL').title).toContain('borrow unknown');
+    expect(vwapxButton(bear, true, true, false, 'SELL').title).toContain('SELL SHORT');
+    expect(vwapxButton(bear, false, true, false, 'SELL').enabled).toBe(false);
+    expect(vwapxButton(undefined, true, true, false, 'SELL')).toMatchObject({ label: 'VWAP X↓', enabled: false });
+    const forming: OTVwapx = { ...bear, available: false, reason: 'cross candle closes in 9s', closesInSec: 9 };
+    expect(vwapxButton(forming, true, true, false, 'SELL')).toEqual({ label: 'VWAP X↓ · 9s', enabled: false, title: 'cross candle closes in 9s' });
+    const nb: OTVwapx = { ...bear, available: false, reason: 'not shortable (no borrow)' };
+    expect(vwapxButton(nb, true, true, false, 'SELL')).toEqual({ label: 'VWAP X↓', enabled: false, title: 'not shortable (no borrow)' });
+    expect(vwapxLine(nb)).toBe('');
+  });
+  it('shows a VWAP X order stop as the IB stop with its own status, not a soft stop toggle', () => {
+    const o = { stopLabel: 'SL 27.80 (IB stop)', stopState: '' as const, stopOn: false, exitQty: 0, exitFilled: 0, kind: 'vwapx' as const, slStatus: 'PreSubmitted', active: true };
+    expect(stopText(o)).toBe('SL 27.80 (IB stop) PreSubmitted');
+    expect(stopToggleable(o)).toBe(false);
+    expect(stopToggleable({ stopState: 'armed', active: true })).toBe(true);
+  });
+});
+
+describe('vwapxSizing', () => {
+  const long = { available: true, reason: '', crossMs: 0, closesInSec: 0, entry: 28, stop: 27.8, tp: 28.28, ageSec: 0, stopPct: -0.71 };
+  const short = { ...long, side: 'SELL' as const, entry: 28, stop: 28.2, tp: 27.72 };
+  it('sizes a long from risk like the server', () => {
+    const z = vwapxSizing(long, 50, 0, 100000)!;
+    expect(z.qty).toBe(242);
+    expect(z.positionUsd).toBe(6776);
+    expect(z.riskUsd).toBeCloseTo(48.4, 6);
+    expect(z.stopPct).toBeCloseTo(0.714, 2);
+    expect(z.rr).toBeCloseTo(1.4, 6);
+    expect(z.capped).toBe(false);
+  });
+  it('sizes a short on the same distance', () => {
+    const z = vwapxSizing(short, 50, 0, 100000)!;
+    expect(z.qty).toBe(242);
+    expect(z.rr).toBeCloseTo(1.4, 6);
+  });
+  it('trims to the max position and says so', () => {
+    const z = vwapxSizing(long, 50, 0, 5000)!;
+    expect(z.qty).toBe(178);
+    expect(z.capped).toBe(true);
+    expect(z.riskUsd).toBeCloseTo(35.6, 6);
+    const l = vwapxSizingLine(z, 50, 5000)!;
+    expect(l.cls).toBe('warn');
+    expect(l.text).toContain('capped by max $5,000');
+    expect(l.text).toContain('real risk $36 of $50');
+  });
+  it('typed shares override the risk', () => {
+    const z = vwapxSizing(long, 50, 100, 100000)!;
+    expect(z.qty).toBe(100);
+    expect(z.typed).toBe(true);
+    expect(z.riskUsd).toBeCloseTo(20, 6);
+    expect(z.overMax).toBe(false);
+  });
+  it('flags typed shares above the max position', () => {
+    const z = vwapxSizing(long, 50, 1000, 5000)!;
+    expect(z.overMax).toBe(true);
+    expect(vwapxSizingLine(z, 50, 5000)!.cls).toBe('over');
+  });
+  it('is null without a usable stop distance, size or levels', () => {
+    expect(vwapxSizing({ ...long, stop: 28 }, 50, 0, 5000)).toBeNull();
+    expect(vwapxSizing({ ...long, stop: NaN }, 50, 0, 5000)).toBeNull();
+    expect(vwapxSizing({ ...long, available: false }, 50, 0, 5000)).toBeNull();
+    expect(vwapxSizing(null, 50, 0, 5000)).toBeNull();
+    expect(vwapxSizing(long, 0, 0, 5000)).toBeNull();
+    expect(vwapxSizing(long, 0.1, 0, 5000)).toBeNull();
+    expect(vwapxSizingLine(null, 50, 5000)).toBeNull();
+  });
+  it('tints rr < 1 amber and formats the line', () => {
+    const z = vwapxSizing({ ...long, tp: 28.1 }, 50, 0, 100000)!;
+    expect(z.rr).toBeCloseTo(0.5, 6);
+    expect(vwapxSizingLine(z, 50, 100000)!.cls).toBe('warn');
+    expect(vwapxSizingLine(vwapxSizing(long, 50, 0, 100000), 50, 100000)!.text).toBe('242 sh · $6,776 · risk $48 · stop 0.71% · TP 1.00% = 1.4R');
   });
 });

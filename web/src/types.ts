@@ -489,7 +489,7 @@ export interface DayLogFrame {
 // 'dildo' GREEN DILDO, 'dildoPb' 9 EMA PULLBACK, 'dildoCancel' PB CANCELLED,
 // 'climax' VOLUME CLIMAX, 'bottom' BOTTOM CONFIRMED, 'climaxFail' CLIMAX FAILED,
 // 'bbs' BOUNCY BALL SHORT. 'ignition' IGNITION.
-export type FlagEventKind = 'impulse' | 'flat' | 'emaNear' | 'entry' | 'add' | 'earlyBreak' | 'failed' | 'exit' | 'slam' | 'dildo' | 'dildoPb' | 'dildoCancel' | 'climax' | 'bottom' | 'climaxFail' | 'bbs' | 'ignition' | 'power' | 'powerSetup' | 'volBreak' | 'volBreakEntry' | 'vwapBull' | 'vwapBear';
+export type FlagEventKind = 'impulse' | 'flat' | 'emaNear' | 'entry' | 'add' | 'earlyBreak' | 'failed' | 'exit' | 'slam' | 'dildo' | 'dildoPb' | 'dildoCancel' | 'climax' | 'bottom' | 'climaxFail' | 'bbs' | 'ignition' | 'power' | 'powerSetup' | 'volBreak' | 'volBreakEntry' | 'vwapBull' | 'vwapBear' | 'vwapEarlyUp' | 'vwapEarlyDn';
 export interface FlagEvent {
   ts: number; // bar start, ms
   at: number; // server ms when recorded

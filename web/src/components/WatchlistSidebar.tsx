@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState, type ReactNode, type CSSProperties } from 'react';
 import { useStore } from '../store';
 import { sendWatchlist } from '../ws';
 import { SideBoxes } from './SideBoxes';
@@ -26,7 +26,15 @@ export function tickerish(raw: string): string | null {
   return /^[A-Z][A-Z0-9.\-]{0,9}$/.test(s) ? s : null;
 }
 
-export function WatchlistSidebar({ boxes = true, children }: { boxes?: boolean; children?: ReactNode }) {
+export function WatchlistSidebar({
+  boxes = true,
+  children,
+  style,
+}: {
+  boxes?: boolean;
+  children?: ReactNode;
+  style?: CSSProperties; // e.g. the Signal window's dragged sidebar width
+}) {
   const watchlist = useStore((s) => s.watchlist);
   const [input, setInput] = useState('');
   const [dragSym, setDragSym] = useState<string | null>(null);
@@ -50,7 +58,7 @@ export function WatchlistSidebar({ boxes = true, children }: { boxes?: boolean; 
   };
 
   return (
-    <aside
+    <aside style={style}
       className={`charts-watchlist${extOver ? ' dropzone' : ''}`}
       // The sidebar as a whole accepts tickers dragged in from ANY window's
       // scan grid (dragSym null = the drag didn't start on our own chips).

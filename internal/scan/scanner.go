@@ -751,6 +751,10 @@ func (s *Scanner) overlayNews(snap *core.MetricSnapshot) {
 
 // --- internal (called from the Run goroutine, or directly in tests) ---
 
+// minScanPrice: no scan lists a stock under this (user, 2026-10-31). A row with
+// no price yet is left to the scan's own filter.
+var minScanPrice = 0.50
+
 func (s *Scanner) upsert(def core.ScanDef) {
 	pred, err := compile(def.Filter)
 	if err != nil {
@@ -770,7 +774,9 @@ func (s *Scanner) upsert(def core.ScanDef) {
 		s.scans[def.ID] = st
 	}
 	st.def = def
-	st.pred = pred
+	st.pred = func(r *core.Row) bool {
+		return !(r.Last > 0 && r.Last < minScanPrice) && pred(r)
+	}
 	st.basePred = pred
 	st.usesHits = filterUsesHits(def.Filter)
 	st.sortKeys = def.Sort

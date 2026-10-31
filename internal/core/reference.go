@@ -551,4 +551,9 @@ const (
 	KindEmaVwapBear  = "vwapBear"
 	LabelEmaVwapBull = "VWAP+"
 	LabelEmaVwapBear = "VWAP−"
+
+	KindEmaVwapEarlyUp  = "vwapEarlyUp"
+	KindEmaVwapEarlyDn  = "vwapEarlyDn"
+	LabelEmaVwapEarlyUp = "VWAP+ early"
+	LabelEmaVwapEarlyDn = "VWAP− early"
 )

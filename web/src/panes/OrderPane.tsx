@@ -24,6 +24,11 @@ import {
   parseShares,
   parseTpChoice,
   prepareBody,
+  vwapxBody,
+  vwapxButton,
+  vwapxLine,
+  vwapxSizing,
+  vwapxSizingLine,
   actionState,
   ONLY_TICKET_ORDERS,
   parseStopOn,
@@ -68,6 +73,7 @@ function save(key: string, v: string) {
 }
 
 export function OrderPane() {
+  const [stopEdit, setStopEdit] = useState<{ id: number; val: string } | null>(null);
   const [st, setSt] = useState<OTState | null>(null);
   const [err, setErr] = useState('');
   const [riskChoice, setRiskChoice] = useState<RiskChoice>(() => parseRiskChoice(load(RISK_KEY, 'mid')));
@@ -210,6 +216,12 @@ export function OrderPane() {
   const pill = emaPill(st);
   const canTrade = connected && !!st.sym && emaUsable(st) && (shares > 0 || riskUsd > 0) && !busy;
   const pending = st.pending;
+  const vx = vwapxButton(st.vwapx, shares > 0 || riskUsd > 0, connected && !!st.sym, busy);
+  const vxLine = vwapxLine(st.vwapx);
+  const vxb = vwapxButton(st.vwapxBear, shares > 0 || riskUsd > 0, connected && !!st.sym, busy, 'SELL');
+  const vxbLine = vwapxLine(st.vwapxBear);
+  const vxSize = vwapxSizingLine(vwapxSizing(st.vwapx, riskUsd, shares, st.settings.maxPositionUSD), riskUsd, st.settings.maxPositionUSD);
+  const vxbSize = vwapxSizingLine(vwapxSizing(st.vwapxBear, riskUsd, shares, st.settings.maxPositionUSD), riskUsd, st.settings.maxPositionUSD);
   const mv = pending ? marginView(pending) : null;
   const acts = actionState(st, busy);
   const avail = availLabel(st.funds);
@@ -306,6 +318,11 @@ export function OrderPane() {
             Power Setup
           </span>
         )}
+        {activePreset(st.settings) === 'newsflag' && (
+          <span className="ot-badge ot-ps" title="News Flag preset: 9EMA entry, usual stop and risk, no breakeven, exit on the 5m trail (previous 5m bar's low)">
+            News Flag
+          </span>
+        )}
         <span className="ot-spacer" />
         <button className="ot-mini iconbtn tile-btn" onClick={openSettings} title="Connection settings and max position $" aria-label="Settings">
           ⚙
@@ -345,6 +362,16 @@ export function OrderPane() {
           </span>
         )}
       </div>
+      {vxLine && (
+        <div className="ot-vxline" title="9EMA VWAP bull cross: BUY LMT at the cross candle close, real IB stop under its low, TP +1% (times ET)">
+          {vxLine}
+        </div>
+      )}
+      {vxbLine && (
+        <div className="ot-vxline" title="9EMA VWAP bear cross: SELL SHORT LMT at the cross candle close, real IB buy stop over its high, TP -1% (times ET)">
+          {vxbLine}
+        </div>
+      )}
       {showSet && (
         <div className="ot-setwrap" role="dialog" aria-label="Order ticket settings" onClick={(e) => e.target === e.currentTarget && setShowSet(false)}>
           <div className="ot-setpanel">
@@ -613,7 +640,9 @@ export function OrderPane() {
             <button
               className="ot-mini"
               disabled={busy}
-              onClick={() => run('prepare', prepareBody(pending.side as 'BUY' | 'SELL', 0, mv.useMax, pending.sym, pending.tpPct ?? tpPct, !pending.stopOff))}
+              onClick={() =>
+                run('prepare', pending.kind === 'vwapx' ? vwapxBody(mv.useMax, pending.sym, 0, pending.side === 'SELL' ? 'SELL' : 'BUY') : prepareBody(pending.side as 'BUY' | 'SELL', 0, mv.useMax, pending.sym, pending.tpPct ?? tpPct, !pending.stopOff))
+              }
             >
               Use max ({mv.useMax})
             </button>
@@ -634,12 +663,12 @@ export function OrderPane() {
           <div className="ot-tprow">
             <span className="ot-tp-cap">Preset</span>
             <div className="seg" role="group" aria-label="preset" title="Power Setup: 9EMA entry (cancel if unfilled 15m), SL 6% under the 9EMA, TP 3R, BE at +7.5%, 5m trail exit, no drop-cancel">
-              {(['custom', 'power'] as const).map((n) => (
+              {(['custom', 'power', 'newsflag'] as const).map((n) => (
                 <button key={n} className={`segbtn${activePreset(st.settings) === n ? ' on' : ''}`} aria-pressed={activePreset(st.settings) === n} onClick={() => {
                   if (n === 'power') chooseRisk(powerRiskChoice(st.settings));
                   void run('preset', presetBody(n, st.settings));
                 }}>
-                  {n === 'power' ? 'Power Setup' : 'Custom'}
+                  {n === 'power' ? 'Power Setup' : n === 'newsflag' ? 'News Flag' : 'Custom'}
                 </button>
               ))}
             </div>
@@ -654,6 +683,10 @@ export function OrderPane() {
                 const tp = z.limit + 3 * (z.limit - z.stop);
                 return `TP 3R · +${((tp / z.limit - 1) * 100).toFixed(1)}% · ${fmtPx(tp)}`;
               })()}
+            </span>
+          ) : activePreset(st.settings) === 'newsflag' ? (
+            <span className="ot-tp-fixed" title="News Flag: exit when price breaks the previous completed 5-minute bar's low (high for a short). Far +50% limit stays as the bracket's TP">
+              5m trail · prev bar low
             </span>
           ) : (
           <div className="seg ot-tp" role="group" aria-label="take profit">
@@ -718,6 +751,22 @@ export function OrderPane() {
           <button className="ot-btn sell" disabled={!canTrade} onClick={() => run('prepare', prepareBody('SELL', 0, shares, st.sym, tpPct, slOn, riskUsd))}>
             SELL
           </button>
+          <button className="ot-btn buy ot-vwapx" disabled={!vx.enabled} title={vx.title} onClick={() => run('prepare', vwapxBody(shares, st.sym, riskUsd))}>
+            {vx.label}
+          </button>
+          <button className="ot-btn sell ot-vwapx" disabled={!vxb.enabled} title={vxb.title} onClick={() => run('prepare', vwapxBody(shares, st.sym, riskUsd, 'SELL'))}>
+            {vxb.label}
+          </button>
+          {vxSize && (
+            <div className={`ot-vxsize ${vxSize.cls}`} title="What VWAP X would size to with the current Risk / Shares and max position">
+              VWAP X {vxSize.text}
+            </div>
+          )}
+          {vxbSize && (
+            <div className={`ot-vxsize ${vxbSize.cls}`} title="What VWAP X↓ would size to with the current Risk / Shares and max position">
+              VWAP X↓ {vxbSize.text}
+            </div>
+          )}
           <div className="ot-actrow">
             <button
               className="ot-btn close"
@@ -751,7 +800,7 @@ export function OrderPane() {
           <div
             key={o.id}
             className={`ot-order${o.active ? '' : ' done'}`}
-            title={`${o.status}${o.childStatus ? ` / TP ${o.childStatus}` : ''}${o.note ? ` - ${o.note}` : ''}`}
+            title={`${o.status}${o.childStatus ? ` / TP ${o.childStatus}` : ''}${o.slStatus ? ` / SL ${o.slStatus}` : ''}${o.note ? ` - ${o.note}` : ''}`}
           >
             <span className={o.side === 'BUY' ? 'pos' : 'neg'}>{o.side === 'BUY' ? 'B' : 'S'}</span>
             <span>
@@ -770,6 +819,21 @@ export function OrderPane() {
                 {o.stopOn === false ? 'SL on' : 'SL off'}
               </button>
             )}
+            {o.canStop && (stopEdit?.id === o.id ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void run('movestop', { id: o.id, px: Number(stopEdit.val) });
+                  setStopEdit(null);
+                }}
+              >
+                <input value={stopEdit.val} autoFocus size={6} aria-label="stop price" onChange={(e) => setStopEdit({ id: o.id, val: e.target.value })} onKeyDown={(e) => { if (e.key === 'Escape') setStopEdit(null); }} />
+              </form>
+            ) : (
+              <button className="ot-x ot-sl-x" disabled={busy} title="type a new stop price, Enter sends it, Esc cancels" onClick={() => setStopEdit({ id: o.id, val: String((o.kind === 'vwapx' ? o.sl : o.stopLevel) || '') })}>
+                SL
+              </button>
+            ))}
             {o.canBe && (
               <button className="ot-x ot-sl-x" disabled={busy} title="move this order's soft stop to entry" onClick={() => run('stopbe', { id: o.id })}>
                 → BE
